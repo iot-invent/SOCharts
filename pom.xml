@@ -21,12 +21,14 @@
 
     <groupId>io.rtlscloud.vaadin</groupId>
     <artifactId>so-charts</artifactId>
-    <version>3.2-SNAPSHOT</version>
+    <version>${revision}${changelist}</version>
     <name>SO Charts</name>
     <description>Vaadin LitElement wrapper for ECharts</description>
 
     <properties>
-        <vaadin.version>14.11.5</vaadin.version>
+        <revision>3.2</revision>
+	<changelist>-SNAPSHOT</changelist>
+	<vaadin.version>14.11.5</vaadin.version>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
