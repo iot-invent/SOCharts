@@ -23,88 +23,92 @@ package com.storedobject.chart;
  */
 public abstract class AbstractStyle implements ComponentProperty {
 
-    private AbstractColor color;
-    private int opacity = -1;
-    private Shadow shadow;
+	private AbstractColor color;
+	private int opacity = -1;
+	private Shadow shadow;
 
-    @Override
-    public void encodeJSON(StringBuilder sb) {
-        if(color != null) {
-            color.encodeJSON(sb);
-        }
-        encode(sb, "opacity", Math.min(100, opacity) / 100.0);
-        ComponentPart.encode(sb, null, shadow);
-    }
+	@Override
+	public void encodeJSON(final StringBuilder sb) {
+		if (color != null) {
+			color.encodeJSON(sb);
+		}
+		encode(sb, "opacity", Math.min(100, opacity) / 100.0);
+		ComponentPart.encode(sb, null, shadow);
+	}
 
-    static void encode(StringBuilder sb, String name, Object value) {
-        if(value == null) {
-            return;
-        }
-        if(value instanceof Number && ((Number)value).intValue() <= 0) {
-            return;
-        }
-        ComponentPart.addComma(sb);
-        if(value instanceof LineStyle.Type) {
-            value = value.toString().toLowerCase();
-        }
-        ComponentPart.encode(sb, name, value);
-    }
+	static void encode(final StringBuilder sb, final String name, Object value) {
+		if (value == null) {
+			return;
+		}
+		if (value instanceof Number && ((Number) value).doubleValue() <= 0) {
+			return;
+		}
+		ComponentPart.addComma(sb);
+		if (value instanceof LineStyle.Type) {
+			value = value.toString().toLowerCase();
+		}
+		ComponentPart.encode(sb, name, value);
+	}
 
-    /**
-     * Get color.
-     *
-     * @return Color.
-     */
-    public final AbstractColor getColor() {
-        return color;
-    }
+	/**
+	 * Get color.
+	 *
+	 * @return Color.
+	 */
+	public final AbstractColor getColor() {
+		return color;
+	}
 
-    /**
-     * Set color.
-     *
-     * @param color Color.
-     */
-    public void setColor(AbstractColor color) {
-        this.color = color;
-    }
+	/**
+	 * Set color.
+	 *
+	 * @param color
+	 *            Color.
+	 */
+	public void setColor(final AbstractColor color) {
+		this.color = color;
+	}
 
-    /**
-     * Get the shadow.
-     *
-     * @param create Whether to create if not exists or not.
-     * @return Shadow.
-     */
-    public final Shadow getShadow(boolean create) {
-        if(shadow == null && create) {
-            shadow = new Shadow();
-        }
-        return shadow;
-    }
+	/**
+	 * Get the shadow.
+	 *
+	 * @param create
+	 *            Whether to create if not exists or not.
+	 * @return Shadow.
+	 */
+	public final Shadow getShadow(final boolean create) {
+		if (shadow == null && create) {
+			shadow = new Shadow();
+		}
+		return shadow;
+	}
 
-    /**
-     * Set the shadow.
-     *
-     * @param shadow Shadow.
-     */
-    public void setShadow(Shadow shadow) {
-        this.shadow = shadow;
-    }
+	/**
+	 * Set the shadow.
+	 *
+	 * @param shadow
+	 *            Shadow.
+	 */
+	public void setShadow(final Shadow shadow) {
+		this.shadow = shadow;
+	}
 
-    /**
-     * Get the opacity of the line (Value as percentage 0 to 100%).
-     *
-     * @return Opacity.
-     */
-    public int getOpacity() {
-        return opacity;
-    }
+	/**
+	 * Get the opacity of the line (Value as percentage 0 to 100%).
+	 *
+	 * @return Opacity.
+	 */
+	public int getOpacity() {
+		return opacity;
+	}
 
-    /**
-     * Set the opacity of the line (Value as percentage, 0 to 100%).
-     *
-     * @param opacity Opacity.
-     */
-    public void setOpacity(int opacity) {
-        this.opacity = opacity;
-    }
+	/**
+	 * Set the opacity of the line (Value as percentage, 0 to 100%).
+	 *
+	 * @param opacity
+	 *            Opacity.
+	 */
+	public void setOpacity(final int opacity) {
+		this.opacity = opacity;
+	}
 }
