@@ -23,133 +23,120 @@ package com.storedobject.chart;
  */
 public class BarChart extends XYChart {
 
-    private boolean roundCap;
-    private int barGap = Integer.MAX_VALUE, barCategoryGap = Integer.MAX_VALUE, barWidth = Integer.MAX_VALUE;
+	private boolean roundCap;
+	private int barGap = Integer.MAX_VALUE, barCategoryGap = Integer.MAX_VALUE, barWidth = Integer.MAX_VALUE;
 
-    /**
-     * Constructor. (Data can be set later).
-     */
-    public BarChart() {
-        this(null, null);
-    }
+	/**
+	 * Constructor. (Data can be set later).
+	 */
+	public BarChart() {
+		this(null, null);
+	}
 
-    /**
-     * Constructor.
-     *
-     * @param xData Data for X axis.
-     * @param yData Data for Y axis.
-     */
-    public BarChart(AbstractDataProvider<?> xData, AbstractDataProvider<?> yData) {
-        super(ChartType.Bar, xData, yData);
-    }
+	/**
+	 * Constructor.
+	 *
+	 * @param xData
+	 *            Data for X axis.
+	 * @param yData
+	 *            Data for Y axis.
+	 */
+	public BarChart(final AbstractDataProvider<?> xData, final AbstractDataProvider<?> yData) {
+		super(ChartType.Bar, xData, yData);
+	}
 
-    @Override
-    public void encodeJSON(StringBuilder sb) {
-        super.encodeJSON(sb);
-        ComponentPart.encode(sb,"roundCap", roundCap);
-        if(barGap < Integer.MAX_VALUE) {
-            ComponentPart.encode(sb, "barGap", barGap);
-        }
-        if(barCategoryGap < Integer.MAX_VALUE) {
-            ComponentPart.encode(sb, "barCategoryGap", barCategoryGap);
-        }
-        if(barWidth < Integer.MAX_VALUE) {
-            ComponentPart.encode(sb, "barWidth", barWidth);
-        }
-    }
+	@Override
+	public void encodeJSON(final StringBuilder sb) {
+		super.encodeJSON(sb);
+		ComponentPart.encode(sb, "roundCap", roundCap);
+		if (barGap < Integer.MAX_VALUE) {
+			ComponentPart.encode(sb, "barGap", barGap);
+		}
+		if (barCategoryGap < Integer.MAX_VALUE) {
+			ComponentPart.encode(sb, "barCategoryGap", barCategoryGap);
+		}
+		if (barWidth < Integer.MAX_VALUE) {
+			ComponentPart.encode(sb, "barWidth", barWidth);
+		}
+	}
 
-    /**
-     * Is round-cap feature set?
-     *
-     * @return True/false.
-     */
-    public final boolean isRoundCap() {
-        return roundCap;
-    }
+	/**
+	 * Is round-cap feature set?
+	 *
+	 * @return True/false.
+	 */
+	public final boolean isRoundCap() {
+		return roundCap;
+	}
 
-    /**
-     * Set round-cap feature. If set it to <code>true</code>, the ending portion of the bar will be rounded.
-     * This will be effective only when plotting this chart on {@link PolarCoordinate}s.
-     *
-     * @param roundCap Round-cap feature.
-     */
-    public void setRoundCap(boolean roundCap) {
-        this.roundCap = roundCap;
-    }
+	/**
+	 * Set round-cap feature. If set it to <code>true</code>, the ending portion of the bar will be rounded. This will
+	 * be effective only when plotting this chart on {@link PolarCoordinate}s.
+	 *
+	 * @param roundCap
+	 *            Round-cap feature.
+	 */
+	public void setRoundCap(final boolean roundCap) {
+		this.roundCap = roundCap;
+	}
 
-    /**
-     * Get the gap between bars when multiple bar charts are displayed on the same coordinate system.
-     *
-     * @return Gap as a percentage value. Negative values are supported to enable overlapping.
-     */
-    public final int getBarGap() {
-        return barGap;
-    }
+	/**
+	 * Get the gap between bars when multiple bar charts are displayed on the same coordinate system.
+	 *
+	 * @return Gap as a percentage value. Negative values are supported to enable overlapping.
+	 */
+	public final int getBarGap() {
+		return barGap;
+	}
 
-    /**
-     * Set the gap between bars when multiple bar charts are displayed on the same coordinate system. Need to set only
-     * on one of the bar charts and it will be shared by all bar charts on the same coordinate system. If you set
-     * different values on different bar charts, only the one set in the last one will be used.
-     *
-     * @param barGap Gap as a percentage value. Negative values are supported to enable overlapping.
-     */
-    public void setBarGap(int barGap) {
-        this.barGap = barGap;
-    }
+	/**
+	 * Set the gap between bars when multiple bar charts are displayed on the same coordinate system. Need to set only
+	 * on one of the bar charts and it will be shared by all bar charts on the same coordinate system. If you set
+	 * different values on different bar charts, only the one set in the last one will be used.
+	 *
+	 * @param barGap
+	 *            Gap as a percentage value. Negative values are supported to enable overlapping.
+	 */
+	public void setBarGap(final int barGap) {
+		this.barGap = barGap;
+	}
 
-    /**
-     * Get the gap between the categories of the same bar chart.
-     *
-     * @return Gap as a percentage value. Negative values are supported to enable overlapping.
-     */
-    public final int getBarCategoryGap() {
-        return barCategoryGap;
-    }
+	/**
+	 * Get the gap between the categories of the same bar chart.
+	 *
+	 * @return Gap as a percentage value. Negative values are supported to enable overlapping.
+	 */
+	public final int getBarCategoryGap() {
+		return barCategoryGap;
+	}
 
-    /**
-     * Set the gap between the categories of the same bar chart.
-     *
-     * @param barCategoryGap Gap as a percentage value. Negative values are supported to enable overlapping.
-     */
-    public void setBarCategoryGap(int barCategoryGap) {
-        this.barCategoryGap = barCategoryGap;
-    }
+	/**
+	 * Set the gap between the categories of the same bar chart.
+	 *
+	 * @param barCategoryGap
+	 *            Gap as a percentage value. Negative values are supported to enable overlapping.
+	 */
+	public void setBarCategoryGap(final int barCategoryGap) {
+		this.barCategoryGap = barCategoryGap;
+	}
 
-    /**
-     * Get the width of the bar.
-     *
-     * @return Width of the bar in pixels.
-     */
-    public final int getBarWidth() {
-        return barWidth;
-    }
+	/**
+	 * Get the width of the bar.
+	 *
+	 * @return Width of the bar in pixels.
+	 */
+	public final int getBarWidth() {
+		return barWidth;
+	}
 
-    /**
-     * Set the width of the bar.
-     *
-     * @param barWidth Width of the bar in pixels.
-     */
-    public void setBarWidth(int barWidth) {
-        this.barWidth = barWidth;
-    }
+	/**
+	 * Set the width of the bar.
+	 *
+	 * @param barWidth
+	 *            Width of the bar in pixels.
+	 */
+	public void setBarWidth(final int barWidth) {
+		this.barWidth = barWidth;
+	}
 
-    /**
-     * This chart doesn't support mark area and this method always returns <code>null</code>.
-     *
-     * @param create If passed true, a new {@link MarkArea} is created if not exists.
-     * @return <code>Null</code>
-     */
-    @Override
-    public final MarkArea getMarkArea(boolean create) {
-        return null;
-    }
-
-    /**
-     * This chart doesn't support mark area and this method does nothing.
-     *
-     * @param markArea Mark area to set.
-     */
-    @Override
-    public final void setMarkArea(MarkArea markArea) {
-    }
 }
