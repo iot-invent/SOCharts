@@ -17,6 +17,7 @@
 package com.storedobject.chart;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -506,6 +507,12 @@ public class SOChart extends LitComponent implements HasSize {
 		parts.stream().filter(p -> p instanceof HasData).map(p -> (HasData) p).forEach(p -> p.declareData(collectData));
 		collectData.removeIf(Objects::isNull);
 		data.addAll(collectData);
+
+		// XCLOUD-955 yturchanin: sort data collection in order to avoid echarts bug (the size of the first dataset will
+		// be applied to following datasets so some data may be not visible on the chart)
+		Collections.sort(data, Comparator.comparing(AbstractDataProvider::dataSize));
+		Collections.reverse(data);
+
 		int dserial = data.stream().mapToInt(ComponentPart::getSerial).max().orElse(1);
 		dserial = Math.max(dserial, 1);
 		while (!data.isEmpty()) {

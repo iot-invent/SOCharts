@@ -28,191 +28,211 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
- * Abstract data provider interface. The type of data can be anything that can be used
- * for charting. In charting, we need to distinguish between "numeric", "date/time", "categories" and "logarithmic"
- * values types. (See {@link DataType}).
+ * Abstract data provider interface. The type of data can be anything that can be used for charting. In charting, we
+ * need to distinguish between "numeric", "date/time", "categories" and "logarithmic" values types. (See
+ * {@link DataType}).
  *
- * @param <T> Data class type.
+ * @param <T>
+ *            Data class type.
  * @author Syam
  */
 public interface AbstractDataProvider<T> extends ComponentPart {
 
-    /**
-     * Data provided by this provider as a stream.
-     * <p>Note: The {@link Stream} should be reproducible after a terminal operation.</p>
-     *
-     * @return Stream of data values.
-     */
-    Stream<T> stream();
+	/**
+	 * Data provided by this provider as a stream.
+	 * <p>
+	 * Note: The {@link Stream} should be reproducible after a terminal operation.
+	 * </p>
+	 *
+	 * @return Stream of data values.
+	 */
+	Stream<T> stream();
 
-    /**
-     * Collect all data values into a list.
-     *
-     * @return Data values as a list.
-     */
-    default List<T> asList() {
-        if(this instanceof List) {
-            //noinspection unchecked
-            return (List<T>) this;
-        }
-        List<T> list = new ArrayList<>();
-        stream().forEach(list::add);
-        return list;
-    }
+	default long dataSize() {
+		return stream().count();
+	}
 
-    /**
-     * Get the value type of the data.
-     *
-     * @return value type.
-     */
-    DataType getDataType();
+	/**
+	 * Collect all data values into a list.
+	 *
+	 * @return Data values as a list.
+	 */
+	default List<T> asList() {
+		if (this instanceof List) {
+			// noinspection unchecked
+			return (List<T>) this;
+		}
+		final List<T> list = new ArrayList<>();
+		stream().forEach(list::add);
+		return list;
+	}
 
-    @Override
-    default String getName() {
-        return "Data " + getSerial();
-    }
+	/**
+	 * Get the value type of the data.
+	 *
+	 * @return value type.
+	 */
+	DataType getDataType();
 
-    @Override
-    default void encodeJSON(StringBuilder sb) {
-        sb.append('[');
-        AtomicBoolean first = new AtomicBoolean(true);
-        stream().forEach(v -> {
-            if(first.get()) {
-                first.set(false);
-            } else {
-                sb.append(',');
-            }
-            encode(sb, v);
-        });
-        sb.append(']');
-    }
+	@Override
+	default String getName() {
+		return "Data " + getSerial();
+	}
 
-    /**
-     * Encode a value for this data.
-     *
-     * @param sb Encoded value will be appended here.
-     * @param value Value to encode.
-     */
-    default void encode(StringBuilder sb, T value) {
-        sb.append(ComponentPart.escape(value));
-    }
+	@Override
+	default void encodeJSON(final StringBuilder sb) {
+		sb.append('[');
+		final AtomicBoolean first = new AtomicBoolean(true);
+		stream().forEach(v -> {
+			if (first.get()) {
+				first.set(false);
+			} else {
+				sb.append(',');
+			}
+			encode(sb, v);
+		});
+		sb.append(']');
+	}
 
-    @Override
-    default long getId() {
-        return -1L;
-    }
+	/**
+	 * Encode a value for this data.
+	 *
+	 * @param sb
+	 *            Encoded value will be appended here.
+	 * @param value
+	 *            Value to encode.
+	 */
+	default void encode(final StringBuilder sb, final T value) {
+		sb.append(ComponentPart.escape(value));
+	}
 
-    @Override
-    default void validate() throws ChartException {
-    }
+	@Override
+	default long getId() {
+		return -1L;
+	}
 
-    /**
-     * Get the minimum value from this data. This is used by certain components such as {@link VisualMap}
-     * to automatically find out the minimum value of a value-based chart.
-     * <p>The default implementation tries to use the {@link Comparator} returned by the {@link #getComparator()} method
-     * to determine this value. If no {@link Comparator} is available, <code>null</code> will be returned.</p>
-     *
-     * @return Minimum value of the data.
-     */
-    default T getMin() {
-        if(getDataType() == DataType.CATEGORY) {
-            return stream().findFirst().orElse(null);
-        }
-        Comparator<T> comparator = getComparator();
-        return comparator == null ? null : stream().min(getComparator()).orElse(null);
-    }
+	@Override
+	default void validate() throws ChartException {
+	}
 
-    /**
-     * Get the maximum value from this data. This is used by certain components such as {@link VisualMap}
-     * to automatically find out the minimum value of a value-based chart.
-     * <p>The default implementation tries to use the {@link Comparator} returned by the {@link #getComparator()} method
-     * to determine this value. If no {@link Comparator} is available, <code>null</code> will be returned.</p>
-     *
-     * @return Minimum value of the data.
-     */
-    default T getMax() {
-        if(getDataType() == DataType.CATEGORY) {
-            AtomicReference<T> value = new AtomicReference<>(null);
-            stream().forEach(value::set);
-            return value.get();
-        }
-        Comparator<T> comparator = getComparator();
-        return comparator == null ? null : stream().max(getComparator()).orElse(null);
-    }
+	/**
+	 * Get the minimum value from this data. This is used by certain components such as {@link VisualMap} to
+	 * automatically find out the minimum value of a value-based chart.
+	 * <p>
+	 * The default implementation tries to use the {@link Comparator} returned by the {@link #getComparator()} method to
+	 * determine this value. If no {@link Comparator} is available, <code>null</code> will be returned.
+	 * </p>
+	 *
+	 * @return Minimum value of the data.
+	 */
+	default T getMin() {
+		if (getDataType() == DataType.CATEGORY) {
+			return stream().findFirst().orElse(null);
+		}
+		final Comparator<T> comparator = getComparator();
+		return comparator == null ? null : stream().min(getComparator()).orElse(null);
+	}
 
-    /**
-     * This comparator, if available, will be used to determine the min/max values of the data if required by the
-     * {@link #getMin()} and {@link #getMax()} methods.
-     *
-     * @return Comparator. (Default is null).
-     */
-    default Comparator<T> getComparator() {
-        //noinspection unchecked
-        return getDataType() == DataType.NUMBER ? (Comparator<T>) new NumberComparator() : null;
-    }
+	/**
+	 * Get the maximum value from this data. This is used by certain components such as {@link VisualMap} to
+	 * automatically find out the minimum value of a value-based chart.
+	 * <p>
+	 * The default implementation tries to use the {@link Comparator} returned by the {@link #getComparator()} method to
+	 * determine this value. If no {@link Comparator} is available, <code>null</code> will be returned.
+	 * </p>
+	 *
+	 * @return Minimum value of the data.
+	 */
+	default T getMax() {
+		if (getDataType() == DataType.CATEGORY) {
+			final AtomicReference<T> value = new AtomicReference<>(null);
+			stream().forEach(value::set);
+			return value.get();
+		}
+		final Comparator<T> comparator = getComparator();
+		return comparator == null ? null : stream().max(getComparator()).orElse(null);
+	}
 
-    /**
-     * A crude {@link Number} comparator that can be used for data that is of {@link Number} type.
-     */
-    class NumberComparator implements Comparator<Number> {
+	/**
+	 * This comparator, if available, will be used to determine the min/max values of the data if required by the
+	 * {@link #getMin()} and {@link #getMax()} methods.
+	 *
+	 * @return Comparator. (Default is null).
+	 */
+	default Comparator<T> getComparator() {
+		// noinspection unchecked
+		return getDataType() == DataType.NUMBER ? (Comparator<T>) new NumberComparator() : null;
+	}
 
-        @Override
-        public int compare(Number n1, Number n2) {
-            if(n1 == null || n2 == null) {
-                return n1 == null && n2 == null ? 0 : (n1 == null ? -1 : 1);
-            }
-            return new BigDecimal(n1.toString()).compareTo(new BigDecimal(n2.toString()));
-        }
-    }
+	/**
+	 * A crude {@link Number} comparator that can be used for data that is of {@link Number} type.
+	 */
+	class NumberComparator implements Comparator<Number> {
 
-    /**
-     * Create another data set by applying a mapping function to this data set. (Each item and its index are passed to
-     * the mapping function).
-     *
-     * @param convertedType Converted type.
-     * @param mappingFunction Mapping function.
-     * @param <D> Type of data in the target data set.
-     * @return A new data set with values mapped from this data set.
-     */
-    default <D> AbstractDataProvider<D> create(DataType convertedType, BiFunction<T, Integer, D> mappingFunction) {
-        return new AbstractDataProvider<>() {
+		@Override
+		public int compare(final Number n1, final Number n2) {
+			if (n1 == null || n2 == null) {
+				return n1 == null && n2 == null ? 0 : (n1 == null ? -1 : 1);
+			}
+			return new BigDecimal(n1.toString()).compareTo(new BigDecimal(n2.toString()));
+		}
+	}
 
-            private int serial = -1;
+	/**
+	 * Create another data set by applying a mapping function to this data set. (Each item and its index are passed to
+	 * the mapping function).
+	 *
+	 * @param convertedType
+	 *            Converted type.
+	 * @param mappingFunction
+	 *            Mapping function.
+	 * @param <D>
+	 *            Type of data in the target data set.
+	 * @return A new data set with values mapped from this data set.
+	 */
+	default <D> AbstractDataProvider<D> create(final DataType convertedType,
+			final BiFunction<T, Integer, D> mappingFunction) {
+		return new AbstractDataProvider<>() {
 
-            @Override
-            public Stream<D> stream() {
-                AtomicInteger index = new AtomicInteger(0);
-                return AbstractDataProvider.this.stream()
-                        .map(item -> mappingFunction.apply(item, index.getAndIncrement()));
-            }
+			private int serial = -1;
 
-            @Override
-            public DataType getDataType() {
-                return convertedType;
-            }
+			@Override
+			public Stream<D> stream() {
+				final AtomicInteger index = new AtomicInteger(0);
+				return AbstractDataProvider.this.stream()
+						.map(item -> mappingFunction.apply(item, index.getAndIncrement()));
+			}
 
-            @Override
-            public void setSerial(int serial) {
-                this.serial = serial;
-            }
+			@Override
+			public DataType getDataType() {
+				return convertedType;
+			}
 
-            @Override
-            public int getSerial() {
-                return serial;
-            }
-        };
-    }
+			@Override
+			public void setSerial(final int serial) {
+				this.serial = serial;
+			}
 
-    /**
-     * Create another data set by applying a mapping function to this data set. (Each item is passed to
-     * the mapping function).
-     *
-     * @param convertedType Converted type.
-     * @param mappingFunction Mapping function.
-     * @param <D> Type of data in the target data set.
-     * @return A new data set with values mapped from this data set.
-     */
-    default <D> AbstractDataProvider<D> create(DataType convertedType, Function<T, D> mappingFunction) {
-        return create(convertedType, (item, index) -> mappingFunction.apply(item));
-    }
+			@Override
+			public int getSerial() {
+				return serial;
+			}
+		};
+	}
+
+	/**
+	 * Create another data set by applying a mapping function to this data set. (Each item is passed to the mapping
+	 * function).
+	 *
+	 * @param convertedType
+	 *            Converted type.
+	 * @param mappingFunction
+	 *            Mapping function.
+	 * @param <D>
+	 *            Type of data in the target data set.
+	 * @return A new data set with values mapped from this data set.
+	 */
+	default <D> AbstractDataProvider<D> create(final DataType convertedType, final Function<T, D> mappingFunction) {
+		return create(convertedType, (item, index) -> mappingFunction.apply(item));
+	}
 }

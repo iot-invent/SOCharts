@@ -19,150 +19,167 @@ package com.storedobject.chart;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.commons.lang3.StringUtils;
+
 /**
- * Representation of legend. A legend will be automatically displayed by the {@link SOChart}. However, that
- * can be turned off using {@link SOChart#disableDefaultLegend()} and customized legends may be added using
+ * Representation of legend. A legend will be automatically displayed by the {@link SOChart}. However, that can be
+ * turned off using {@link SOChart#disableDefaultLegend()} and customized legends may be added using
  * {@link SOChart#add(Component...)}.
  *
  * @author Syam
  */
 public class Legend extends VisiblePart implements Component, HasPosition, HasPadding {
 
-    private Position position;
-    private Padding padding;
-    private TextStyle textStyle;
-    private boolean vertical = false;
-    private Border border;
-    private List<Chart> hiddenCharts;
+	private Position position;
+	private Padding padding;
+	private TextStyle textStyle;
+	private boolean vertical = false;
+	private Border border;
+	private List<Chart> hiddenCharts;
+	private String type;
 
-    @Override
-    public void encodeJSON(StringBuilder sb) {
-        super.encodeJSON(sb);
-        ComponentPart.encode(sb, "textStyle", textStyle);
-        if(vertical) {
-            ComponentPart.encode(sb, "orient", "vertical");
-        }
-        ComponentPart.encode(sb, null, border);
-        if(hiddenCharts != null && !hiddenCharts.isEmpty()) {
-            ComponentPart.addComma(sb);
-            sb.append("\"selected\":{");
-            for(int i = 0; i < hiddenCharts.size(); i++) {
-                if(i > 0) {
-                    sb.append(',');
-                }
-                sb.append(ComponentPart.escape(hiddenCharts.get(i).getName())).append(":false");
-            }
-            sb.append('}');
-        }
-    }
+	@Override
+	public void encodeJSON(final StringBuilder sb) {
+		super.encodeJSON(sb);
+		ComponentPart.encode(sb, "textStyle", textStyle);
+		if (vertical) {
+			ComponentPart.encode(sb, "orient", "vertical");
+		}
+		if (StringUtils.isNotBlank(type)) {
+			ComponentPart.encode(sb, "type", type);
+		}
+		ComponentPart.encode(sb, null, border);
+		if (hiddenCharts != null && !hiddenCharts.isEmpty()) {
+			ComponentPart.addComma(sb);
+			sb.append("\"selected\":{");
+			for (int i = 0; i < hiddenCharts.size(); i++) {
+				if (i > 0) {
+					sb.append(',');
+				}
+				sb.append(ComponentPart.escape(hiddenCharts.get(i).getName())).append(":false");
+			}
+			sb.append('}');
+		}
+	}
 
-    @Override
-    public void validate() {
-    }
+	@Override
+	public void validate() {
+	}
 
-    /**
-     * Display it vertically.
-     */
-    public void showVertically() {
-        vertical = true;
-    }
+	/**
+	 * Display it vertically.
+	 */
+	public void showVertically() {
+		vertical = true;
+	}
 
-    @Override
-    public final Position getPosition(boolean create) {
-        if(position == null && create) {
-            position = new Position();
-        }
-        return position;
-    }
+	@Override
+	public final Position getPosition(final boolean create) {
+		if (position == null && create) {
+			position = new Position();
+		}
+		return position;
+	}
 
-    @Override
-    public final void setPosition(Position position) {
-        this.position = position;
-    }
+	@Override
+	public final void setPosition(final Position position) {
+		this.position = position;
+	}
 
-    /**
-     * Get the text style.
-     *
-     * @param create Whether to create if not exists or not.
-     * @return Text style.
-     */
-    public final TextStyle getTextStyle(boolean create) {
-        if(textStyle == null && create) {
-            textStyle = new TextStyle();
-        }
-        return textStyle;
-    }
+	/**
+	 * Get the text style.
+	 *
+	 * @param create
+	 *            Whether to create if not exists or not.
+	 * @return Text style.
+	 */
+	public final TextStyle getTextStyle(final boolean create) {
+		if (textStyle == null && create) {
+			textStyle = new TextStyle();
+		}
+		return textStyle;
+	}
 
-    /**
-     * Set the text style.
-     *
-     * @param textStyle Text style to set.
-     */
-    public void setTextStyle(TextStyle textStyle) {
-        this.textStyle = textStyle;
-    }
+	/**
+	 * Set the text style.
+	 *
+	 * @param textStyle
+	 *            Text style to set.
+	 */
+	public void setTextStyle(final TextStyle textStyle) {
+		this.textStyle = textStyle;
+	}
 
-    @Override
-    public Padding getPadding(boolean create) {
-        if(padding == null && create) {
-            padding = new Padding();
-        }
-        return padding;
-    }
+	public void setType(final String type) {
+		this.type = type;
+	}
 
-    @Override
-    public void setPadding(Padding padding) {
-        this.padding = padding;
-    }
+	@Override
+	public Padding getPadding(final boolean create) {
+		if (padding == null && create) {
+			padding = new Padding();
+		}
+		return padding;
+	}
 
-    /**
-     * Get the border.
-     * @param create Whether to create if not exists or not.
-     *
-     * @return Border.
-     */
-    public final Border getBorder(boolean create) {
-        if(border == null && create) {
-            border = new Border();
-        }
-        return border;
-    }
+	@Override
+	public void setPadding(final Padding padding) {
+		this.padding = padding;
+	}
 
-    /**
-     * Set the border.
-     *
-     * @param border Border.
-     */
-    public void setBorder(Border border) {
-        this.border = border;
-    }
+	/**
+	 * Get the border.
+	 *
+	 * @param create
+	 *            Whether to create if not exists or not.
+	 *
+	 * @return Border.
+	 */
+	public final Border getBorder(final boolean create) {
+		if (border == null && create) {
+			border = new Border();
+		}
+		return border;
+	}
 
-    private List<Chart> hiddenCharts() {
-        if(hiddenCharts == null) {
-            hiddenCharts = new ArrayList<>();
-        }
-        return hiddenCharts;
-    }
+	/**
+	 * Set the border.
+	 *
+	 * @param border
+	 *            Border.
+	 */
+	public void setBorder(final Border border) {
+		this.border = border;
+	}
 
-    /**
-     * Hide a chart. The chart can be made visible by clicking on the legend later.
-     *
-     * @param chart Chart to hide.
-     */
-    public void hide(Chart chart) {
-        if(chart != null) {
-            hiddenCharts().add(chart);
-        }
-    }
+	private List<Chart> hiddenCharts() {
+		if (hiddenCharts == null) {
+			hiddenCharts = new ArrayList<>();
+		}
+		return hiddenCharts;
+	}
 
-    /**
-     * Make a hidden chart visible again.
-     *
-     * @param chart Chart to make visible.
-     */
-    public void show(Chart chart) {
-        if(chart != null) {
-            hiddenCharts().remove(chart);
-        }
-    }
+	/**
+	 * Hide a chart. The chart can be made visible by clicking on the legend later.
+	 *
+	 * @param chart
+	 *            Chart to hide.
+	 */
+	public void hide(final Chart chart) {
+		if (chart != null) {
+			hiddenCharts().add(chart);
+		}
+	}
+
+	/**
+	 * Make a hidden chart visible again.
+	 *
+	 * @param chart
+	 *            Chart to make visible.
+	 */
+	public void show(final Chart chart) {
+		if (chart != null) {
+			hiddenCharts().remove(chart);
+		}
+	}
 }
