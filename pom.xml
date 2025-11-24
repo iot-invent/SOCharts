@@ -3,21 +3,21 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <parent>
-        <groupId>com.storedobject</groupId>
-        <artifactId>so-vaadinpom</artifactId>
-        <version>24.7.5</version>
-        <relativePath/>
-    </parent>
-
-    <groupId>org.vaadin.addons.so</groupId>
+     <groupId>io.rtlscloud.vaadin</groupId>
     <artifactId>so-charts</artifactId>
-    <version>5.0.3</version>
+    <version>${revision}${changelist}</version>
     <name>SO Charts</name>
     <description>Vaadin LitElement wrapper for ECharts</description>
 
     <properties>
-        <so-helper-version>5.0.1</so-helper-version>
+        <revision>24.9</revision>
+		<changelist>-SNAPSHOT</changelist>
+		<vaadin.version>24.9.5</vaadin.version>
+		<maven.compiler.source>17</maven.compiler.source>
+		<maven.compiler.target>17</maven.compiler.target>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<jetty.version>11.0.25</jetty.version>
     </properties>
 
     <licenses>
@@ -29,30 +29,26 @@
     </licenses>
 
 
-    <organization>
-        <name>Syam Pillai</name>
-    </organization>
+  <organization>
+		<name>IoT Invent GmbH</name>
+	</organization>
 
-    <developers>
-        <developer>
-            <id>syampillai</id>
-            <name>Syam Pillai</name>
-            <email>syam.s.pillai@gmail.com</email>
-        </developer>
-    </developers>
-
-    <repositories>
-        <repository>
-            <id>so-maven</id>
-            <url>https://storedobject.com/maven</url>
-        </repository>
-    </repositories>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.vaadin</groupId>
+                <artifactId>vaadin-bom</artifactId>
+                <type>pom</type>
+                <scope>import</scope>
+                <version>${vaadin.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
-            <groupId>org.vaadin.addons.so</groupId>
-            <artifactId>so-helper</artifactId>
-            <version>5.0.0</version>
+            <groupId>com.vaadin</groupId>
+            <artifactId>vaadin-core</artifactId>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -60,5 +56,314 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+ 	
+ 	<repositories>
+		<repository>
+			<id>Vaadin Directory</id>
+			<url>https://maven.vaadin.com/vaadin-addons</url>
+		</repository>
+		<!-- Repository needed for prerelease versions of Vaadin -->
+		<repository>
+			<id>Vaadin prereleases</id>
+			<url>https://maven.vaadin.com/vaadin-prereleases</url>
+		</repository>
+		<!-- Repository needed for the snapshot versions of Vaadin -->
+		<repository>
+			<id>vaadin-snapshots</id>
+			<url>https://oss.sonatype.org/content/repositories/vaadin-snapshots/</url>
+		</repository>
+	</repositories>
+
+	<pluginRepositories>
+		<!-- Repository needed for prerelease versions of Vaadin -->
+		<pluginRepository>
+			<id>Vaadin prereleases</id>
+			<url>https://maven.vaadin.com/vaadin-prereleases</url>
+		</pluginRepository>
+		<pluginRepository>
+			<id>vaadin-snapshots</id>
+			<url>https://oss.sonatype.org/content/repositories/vaadin-snapshots/</url>
+			<releases>
+				<enabled>false</enabled>
+			</releases>
+		</pluginRepository>
+	</pluginRepositories>
+
+
+	<build>
+		<defaultGoal>jetty:run</defaultGoal>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>3.4.0</version>
+				<configuration>
+					<archive>
+						<index>true</index>
+						<manifest>
+							<addClasspath>false</addClasspath>
+							<addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+						</manifest>
+						<manifestEntries>
+							<Vaadin-Package-Version>1</Vaadin-Package-Version>
+						</manifestEntries>
+					</archive>
+					<!-- Generated file that shouldn't be included in add-ons -->
+					<excludes>
+						<exclude>META-INF/VAADIN/config/flow-build-info.json</exclude>
+					</excludes>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-source-plugin</artifactId>
+				<version>3.3.1</version>
+				<inherited>true</inherited>
+				<executions>
+					<execution>
+						<id>attach-sources</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>jar-no-fork</goal>
+						</goals>
+					</execution>
+				</executions>
+				<configuration>
+					<archive>
+						<addMavenDescriptor>false</addMavenDescriptor>
+					</archive>
+					<includePom>false</includePom>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-enforcer-plugin</artifactId>
+				<version>3.4.1</version>
+				<configuration>
+					<rules>
+						<reactorModuleConvergence>
+							<message>The reactor is not valid</message>
+						</reactorModuleConvergence>
+						<requireReleaseDeps>
+							<message>No Snapshots Allowed!</message>
+						</requireReleaseDeps>
+						<requireReleaseVersion>
+							<message>No Snapshots Allowed!</message>
+						</requireReleaseVersion>
+					</rules>
+					<fail>true</fail>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>com.vaadin</groupId>
+				<artifactId>vaadin-maven-plugin</artifactId>
+				<version>${vaadin.version}</version>
+				<executions>
+					<execution>
+						<goals>
+							<goal>clean-frontend</goal>
+							<goal>prepare-frontend</goal>
+						</goals>
+					</execution>
+				</executions>
+				<configuration>
+					<frontendHotdeploy>true</frontendHotdeploy>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.eclipse.jetty</groupId>
+				<artifactId>jetty-maven-plugin</artifactId>
+				<version>${jetty.version}</version>
+				<configuration>
+					<httpConnector>
+						<port>9001</port>
+					</httpConnector>
+					<scan>5</scan>
+					<!-- Use test scope because the UI/demo classes are in the test package. -->
+					<useTestScope>true</useTestScope>
+					<supportedPackagings>
+						<supportedPackaging>jar</supportedPackaging>
+					</supportedPackagings>
+					<webApp>
+						<resourceBases>
+							<resourceBase>
+								${project.basedir}/src/main/resources/META-INF/resources</resourceBase>
+							<resourceBase>${project.basedir}/src/test/resources/</resourceBase>
+						</resourceBases>
+					</webApp>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-javadoc-plugin</artifactId>
+				<version>3.6.3</version>
+				<inherited>true</inherited>
+				<configuration>
+					<doclint>none</doclint>
+					<failOnError>false</failOnError>
+				</configuration>
+				<executions>
+					<execution>
+						<id>attach-javadocs</id>
+						<goals>
+							<goal>jar</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<artifactId>maven-site-plugin</artifactId>
+				<version>3.10.0</version>
+				<dependencies>
+					<dependency>
+						<groupId>org.apache.maven.wagon</groupId>
+						<artifactId>wagon-webdav-jackrabbit</artifactId>
+						<version>3.5.1</version>
+					</dependency>
+				</dependencies>
+			</plugin>
+		</plugins>
+	</build>
+
+
+ 	<profiles>
+		<profile>
+			<id>directory</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-assembly-plugin</artifactId>
+						<version>3.7.1</version>
+						<configuration>
+							<appendAssemblyId>false</appendAssemblyId>
+							<descriptors>
+								<descriptor>assembly/assembly.xml</descriptor>
+							</descriptors>
+						</configuration>
+						<executions>
+							<execution>
+								<goals>
+									<goal>single</goal>
+								</goals>
+								<phase>install</phase>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-source-plugin</artifactId>
+						<version>3.3.1</version>
+						<inherited>true</inherited>
+						<executions>
+							<execution>
+								<id>attach-sources</id>
+								<phase>verify</phase>
+								<goals>
+									<goal>jar-no-fork</goal>
+								</goals>
+							</execution>
+						</executions>
+						<configuration>
+							<archive>
+								<addMavenDescriptor>false</addMavenDescriptor>
+							</archive>
+							<includePom>false</includePom>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-enforcer-plugin</artifactId>
+						<version>3.4.1</version>
+						<configuration>
+							<rules>
+								<reactorModuleConvergence>
+									<message>The reactor is not valid</message>
+								</reactorModuleConvergence>
+								<requireReleaseDeps>
+									<message>No Snapshots Allowed!</message>
+								</requireReleaseDeps>
+								<requireReleaseVersion>
+									<message>No Snapshots Allowed!</message>
+								</requireReleaseVersion>
+							</rules>
+							<fail>true</fail>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<version>3.6.3</version>
+						<executions>
+							<execution>
+								<id>attach-javadocs</id>
+								<phase>verify</phase>
+								<goals>
+									<goal>jar</goal>
+								</goals>
+							</execution>
+						</executions>
+						<configuration>
+							<quiet>true</quiet>
+							<doclint>none</doclint>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-jar-plugin</artifactId>
+						<version>3.4.0</version>
+						<configuration>
+							<!-- Generated file that shouldn't be included in add-ons -->
+							<excludes>
+								<exclude>
+									META-INF/VAADIN/config/flow-build-info.json</exclude>
+							</excludes>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+		<!-- Run (demo) in production mode -->
+		<profile>
+			<id>production</id>
+			<properties>
+				<vaadin.productionMode>true</vaadin.productionMode>
+			</properties>
+			<dependencies>
+				<dependency>
+					<groupId>com.vaadin</groupId>
+					<artifactId>flow-server-production-mode</artifactId>
+				</dependency>
+			</dependencies>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>com.vaadin</groupId>
+						<artifactId>vaadin-maven-plugin</artifactId>
+						<executions>
+							<execution>
+								<goals>
+									<goal>prepare-frontend</goal>
+									<goal>build-frontend</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
+    <distributionManagement>
+		<repository>
+			<id>nexus</id>
+			<name>Release Repository</name>
+			<url>${repo.releases}</url>
+		</repository>
+		<snapshotRepository>
+			<id>nexus</id>
+			<name>Snapshot</name>
+			<url>${repo.snapshots}</url>
+		</snapshotRepository>
+	</distributionManagement>
 
 </project>
