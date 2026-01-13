@@ -39,7 +39,7 @@ pipeline {
        			not { branch 'master' }
       		}
             steps {
-				nodejs(nodeJSInstallationName: 'nodeJs') {
+				nodejs(nodeJSInstallationName: 'nodeJs20') {
 					withMaven(maven: 'M3', mavenSettingsConfig: 'iot_maven') {
 						sh "mvn ${params.MVN_PARAMS} -e -B clean deploy -Pproduction"
     				}
@@ -53,7 +53,7 @@ pipeline {
      		}
             steps {
 				echo "Releasing ${RELEASE_VERSION}"
-				nodejs(nodeJSInstallationName: 'nodeJs') {
+				nodejs(nodeJSInstallationName: 'nodeJs20') {
 					withMaven(maven: 'M3', mavenSettingsConfig: 'iot_maven') {
 					
 						sh "mvn -B clean -Pproduction -Drevision=${RELEASE_VERSION} -Dchangelist="
