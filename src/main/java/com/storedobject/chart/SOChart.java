@@ -68,7 +68,7 @@ import com.vaadin.flow.shared.Registration;
  */
 @NpmPackage(value = "echarts", version = "5.6.0")
 @Tag("so-chart")
-@JsModule("./so/chart/chart.js")
+@JsModule("./chart/chart.js")
 public class SOChart extends LitComponentWithSize {
 
 	final static ComponentEncoder[] encoders = { new ComponentEncoder("*", DefaultColors.class),
