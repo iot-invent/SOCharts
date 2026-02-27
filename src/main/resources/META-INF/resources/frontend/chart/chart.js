@@ -1,5 +1,4 @@
-//import { LitElement, html, css } from 'lit';
-import { LitElement, html, css } from 'lit-element'
+import { LitElement, html } from 'lit';
 import * as echarts from 'echarts/dist/echarts.min';
 
 export class SOChart extends LitElement {
@@ -23,21 +22,24 @@ export class SOChart extends LitElement {
     constructor() {
         super();
         this.idChart = null;
-        this.data = {};
-        this.allOptions = "";
+        this.events = new Map();
+        this.data = [];
+        this.allOptions = null;
         this.minw = "5vw";
         this.minh = "5vw";
         this.maxw = "6000px";
         this.maxh = "6000px";
         this.width = "33vw";
         this.height = "33vh";
-        this.events = [];
-        
+        this.debugData = false;
+        this.debugOptions = false;
+        this.debugEvent = false;
+
         // Keep a reference to pending resize event. We use this to not trigger too many render events on continuous resize
         this.pendingResizeEvent = null;
-        this.resizeListener = (event) => {
-            if(this.chart && this.chart != null) {
-                // Clear previous pending event (if any) and register a new one. This way only last one will trigger
+        this.resizeListener = () => {
+            if(this.chart) {
+                // Clear previous pending event (if any) and register a new one. This way only the last one will trigger
                 if (this.pendingResizeEvent) {
                     clearTimeout(this.pendingResizeEvent);
                 }
@@ -47,10 +49,6 @@ export class SOChart extends LitElement {
                 }, 500);
             }
         };
-    }
-
-    addEvent(event, data) {
-        this.events.push({ event, data })
     }
 
     connectedCallback() {
@@ -65,16 +63,29 @@ export class SOChart extends LitElement {
         this.destroyChart();
     }
 
+    firstUpdated() {
+        this.shadowRoot.getElementById(this.idChart)
+            .addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+
     updated(changedProps) {
-        if(this.chart && this.chart != null && !changedProps.has("idChart")) {
+        if(this.chart && !changedProps.has("idChart")) {
             this.chart.resize();
         }
     }
 
+    debug(debugData, debugOptions, debugEvent) {
+        this.debugData = debugData;
+        this.debugOptions = debugOptions;
+        this.debugEvent = debugEvent;
+    }
+
+    // noinspection JSUnusedGlobalSymbols
     clearChart() {
         if(this.chart == null) {
             return;
         }
+        this._clearEvents();
         this.chart.clear();
     }
 
@@ -86,71 +97,219 @@ export class SOChart extends LitElement {
         this.chart = null;
     }
 
+    // noinspection JSUnusedGlobalSymbols
     setThemeAndLocale(theme, locale, renderer) {
+        if(!this.allOptions) {
+            return;
+        }
         this.destroyChart();
-        this.updateChart(false, this.allOptions, theme, locale, renderer);
+        this.updateChart(false, this.allOptions, theme, locale, renderer,
+            this.debugData, this.debugOptions, this.debugEvent);
     }
 
-    updateChart(full, options, theme, locale, renderer) {
-        if(full) {
+    updateChart(full, options, theme, locale, renderer, debugData, debugOptions, debugEvent) {
+        this.debug(debugData, debugOptions, debugEvent);
+        if(full || !this.allOptions) {
             this.allOptions = options;
         }
-        var json = JSON.parse(options);
+        let json;
+        try {
+            json = JSON.parse(options);
+        } catch (e) {
+            this.$server.onError(options + " \nError: " + e.message);
+            return;
+        }
         this._stuff(json);
-        if(!this.chart || this.chart == null) {
+        if(!this.chart) {
             this.chart = echarts.init(this.shadowRoot.getElementById(this.idChart), theme, {
                 locale: locale,
                 renderer: renderer
             });
         }
-        this.events.forEach(event => {
-            this.chart.on(event.event, { name: event.data }, params => {
-               this.$server.runEvent(event.event, event.data);
-           })
-        });
+        if(this.debugData) {
+            console.log(this.data);
+        }
+        if(this.debugOptions) {
+            console.log(json);
+        }
         this.chart.setOption(json);
+        this.$server.sendEvents(0);
     }
 
+    // noinspection JSUnusedGlobalSymbols
     clearData() {
-        this.data = {};
+        this.data = [];
     }
 
-    updateData(serial, data) {
-        if(typeof serial !== 'undefined') {
-            this.initData(serial, data);
+    updateData(serial, data, index) {
+        if(serial && typeof serial !== 'undefined') {
+            this.initData(serial, data, index);
         }
-        var json = JSON.parse(this.allOptions);
+        if(!this.allOptions) {
+            return;
+        }
+        const json = JSON.parse(this.allOptions);
         this._stuff(json);
+        if(this.debugData) {
+            console.log(this.data);
+        }
+        if(this.debugOptions) {
+            console.log(json);
+        }
         this.chart.setOption(json);
     }
 
-    initData(serial, data) {
-        this.data["d" + serial] = JSON.parse(data)["d"];
+    initData(serial, data, index) {
+        let d = this.data[index];
+        if(d == null) {
+            d = {};
+            this.data[index] = d;
+        }
+        let json;
+        try {
+            json = JSON.parse(data);
+        } catch (e) {
+            this.$server.onError(data + " \nError in data: " + e.message);
+            return;
+        }
+        d["d" + serial] = json["d"];
     }
 
+    // noinspection JSUnusedGlobalSymbols
     pushData(data) {
-        data = JSON.parse(data)["d"];
-        for(let k in data) {
-            this.data[k].push(data[k]);
-            this.data[k].shift();
-        }
-        this.updateData();
+        this._alterData(data, true);
     }
 
+    // noinspection JSUnusedGlobalSymbols
     appendData(data) {
-        data = JSON.parse(data)["d"];
-        for(let k in data) {
-            this.data[k].push(data[k]);
-        }
-        this.updateData();
+        this._alterData(data, false);
     }
 
-    resetData(serials) {
-        serials = JSON.parse(serials)["d"];
-        serials.forEach(v => {
-            this.data["d" + v] = [];
-        });
-        this.updateData();
+    _alterData(data, shift) {
+        data = JSON.parse(data)["d"];
+        if(this.debugData) {
+            console.log(data);
+        }
+        for(let k in data) {
+            let d = this._getDataAt(k);
+            if(d != null) {
+                d.push(data[k]);
+                if (shift) {
+                    d.shift();
+                }
+            } else {
+                if(this.debugData) {
+                    console.log("Data not found for: " + k);
+                }
+            }
+        }
+        this.updateData(null, this.data);
+    }
+
+    // noinspection JSUnusedGlobalSymbols
+    defineSOEvent(id, type, category, params) {
+        if(!this.chart) {
+            this.$server.sendEvents(0);
+            return;
+        }
+        const old = this.events.get(id);
+        if(old) {
+            this.undefineSOEvent(id);
+        }
+        let handler;
+        if(category === 0) {
+            handler = e => {
+                if(!e.target) {
+                    if (this.debugEvent) {
+                        console.log(e);
+                    }
+                    this.$server.onMouseEvent(id, "", 0, "", "", "", "", "", "", "", "");
+                    return false;
+                }
+            };
+            this.chart.getZr().on(type, handler);
+        } else {
+            if(category === 1) {
+                handler = e => {
+                    if (this.debugEvent) {
+                        console.log(e);
+                    }
+                    this.$server.onMouseEvent(id, e.componentType, e.componentIndex, e.componentSubType, e.seriesId,
+                        e.seriesName, e.targetType, JSON.stringify(e.data), e.dataType, e.seriesType, e.color);
+                };
+            } else if(category === 2) {
+                handler = e => {
+                    if (this.debugEvent) {
+                        console.log(e);
+                    }
+                    this.$server.onLegendEvent(id, e.name, JSON.stringify(e.selected));
+                };
+            } else {
+                this.$server.onError("Event category " + category + " is not supported");
+                this.$server.sendEvents(id);
+                return;
+            }
+            if(params === "") {
+                this.chart.on(type, handler);
+            } else {
+                let json;
+                try {
+                    json = JSON.parse(params);
+                } catch (e) {
+                    this.$server.onError(params + " \nEvent parameter error: " + e.message);
+                    this.$server.sendEvents(id);
+                    return;
+                }
+                this.chart.on(type, json, handler);
+            }
+        }
+        this.events.set(id, { type: type, handler: handler});
+        this.$server.sendEvents(id);
+    }
+
+    // noinspection JSUnusedGlobalSymbols
+    undefineSOEvent(id) {
+        if(!this.chart) {
+            return;
+        }
+        const e = this.events.get(id);
+        if(e) {
+            if(id < 0) {
+                this.chart.getZr().off(e.type, e.handler);
+            } else {
+                this.chart.off(e.type, e.handler);
+            }
+            this.events.delete(id);
+        }
+    }
+
+    // noinspection JSUnusedGlobalSymbols
+    dispatchAction(params) {
+        if(!this.chart) {
+            return;
+        }
+        let json;
+        try {
+            json = JSON.parse(params);
+            console.log(json);
+            this.chart.dispatchAction(json);
+        } catch (e) {
+            this.$server.onError(params + " \nAction parameter error: " + e.message);
+        }
+    }
+
+    _clearEvents() {
+        if(!this.chart) {
+            return;
+        }
+        this.events.forEach((v, k) => {
+            if(k < 0) {
+                this.chart.getZr().off(v.type, v.handler);
+            } else {
+                this.chart.off(v.type, v.handler);
+            }
+        })
+        this.events.clear();
     }
 
     _stuff(obj) {
@@ -162,7 +321,7 @@ export class SOChart extends LitElement {
     }
 
     _stuffFunc(obj) {
-        var o;
+        let o;
         for(let k in obj) {
             o = obj[k];
             if(typeof o === 'object') {
@@ -176,11 +335,13 @@ export class SOChart extends LitElement {
     }
 
     _stuffFuncP(obj) {
-        var o;
+        let o;
         for(let k in obj) {
             o = obj[k];
             if(typeof o === 'object') {
+                // noinspection JSUnresolvedReference
                 if(typeof o.functionP === 'object') {
+                    // noinspection JSUnresolvedReference
                     obj[k] = p => this._formatter(p, o.functionP.body);
                 } else {
                     this._stuffFuncP(o);
@@ -190,7 +351,7 @@ export class SOChart extends LitElement {
     }
 
     _stuffRenderer(obj) {
-        var o;
+        let o;
         for(let k in obj) {
             o = obj[k];
             if(k === "renderItem") {
@@ -202,16 +363,16 @@ export class SOChart extends LitElement {
     }
 
     _stuffData(obj) {
-        var o;
+        let o;
         for(let k in obj) {
             o = obj[k];
             if(k === "data") {
                 if(Array.isArray(o)) {
                     o.forEach((v, i, a) => {
-                        a[i] = this.data["d" + v];
+                        a[i] = this._getDataAt(v);
                     });
                 } else {
-                    obj[k] = this.data["d" + o];
+                    obj[k] = this._getDataAt(o);
                 }
             } else if(typeof o === 'object') {
                 this._stuffData(o);
@@ -219,10 +380,32 @@ export class SOChart extends LitElement {
         }
     }
 
+    _getDataAt(pathIndex) {
+        if (!pathIndex?.toString().startsWith('d')) {
+            pathIndex = "d" + pathIndex;
+        }
+        for (let i = 0; i < this.data.length; i++) {
+            let d = this.data[i];
+            d = d[pathIndex];
+            if(d) {
+                return d;
+            }
+        }
+        return null;
+    }
+
     _stuffDataSet(obj) {
-        obj = obj.dataset;
-        for(let k in obj.source) {
-            obj.source[k] = this.data["d" + obj.source[k]];
+        if (!obj.dataset || !Array.isArray(obj.dataset)) {
+            return;
+        }
+        let i = 0;
+        for (let dataset of obj.dataset) {
+            if (dataset.source) {
+                for (let k in dataset.source) {
+                    dataset.source[k] = this.data[i]["d" + dataset.source[k]];
+                }
+            }
+            ++i;
         }
     }
 
@@ -242,7 +425,7 @@ export class SOChart extends LitElement {
                 }
                 let d;
                 if(typeof o === 'object') {
-                    d = this.data["d" + o[0]];
+                    d = this._getDataAt(o[0]);
                     if(d == null) {
                         continue;
                     }
@@ -256,7 +439,7 @@ export class SOChart extends LitElement {
                     }
                     s = s + d;
                 } else {
-                    d = this.data["d" + o];
+                    d = this._getDataAt(o);
                     if(d == null) {
                         continue;
                     }
@@ -280,56 +463,57 @@ export class SOChart extends LitElement {
 
     // Horizontal bar renderer (used by Gantt chart).
     // Data Point: [Y-value, label, start, end, completed, bar color, prefix color, non-progress color, font-size]
+    // noinspection JSUnusedGlobalSymbols
     _renderHBar(params, api) {
-        var HEIGHT_RATIO = 0.6;
-        var index = api.value(0);
-        var label = api.value(1);
-        var start = api.coord([api.value(2), index]);
-        var end = api.coord([api.value(3), index]);
-        var donePercentage = api.value(4)
-        var color = api.value(5);
-        var prefixColor = api.value(6);
-        var nonProgressColor = api.value(7);
-        var fontSize = api.value(8);
-        var barWidth = end[0] - start[0];
-        var barHeight = api.size([0, 1])[1];
-        var shiftY = 0;
+        const HEIGHT_RATIO = 0.6;
+        const index = api.value(0);
+        const label = api.value(1);
+        const start = api.coord([api.value(2), index]);
+        const end = api.coord([api.value(3), index]);
+        const donePercentage = api.value(4);
+        const color = api.value(5);
+        const prefixColor = api.value(6);
+        const nonProgressColor = api.value(7);
+        const fontSize = api.value(8);
+        let barWidth = end[0] - start[0];
+        let barHeight = api.size([0, 1])[1];
+        let shiftY;
         if(color === prefixColor) { // Not a Gantt chart
             shiftY = 0;
         } else {
             shiftY = -(barHeight / 2);
         }
         barHeight *= HEIGHT_RATIO;
-        var x = start[0];
-        var y = start[1] - (barHeight / 2) + shiftY;
+        let x = start[0];
+        const y = start[1] - (barHeight / 2) + shiftY;
         x += 3;
         barWidth -= 3;
         if(barWidth < 0) {
             barWidth = 0;
         }
-        var rectSystem = {
+        const rectSystem = {
             x: params.coordSys.x,
             y: params.coordSys.y,
             width: params.coordSys.width,
             height: params.coordSys.height
         };
-        var rectPrefix = {
+        let rectPrefix = {
             x: x - 3,
             y: y,
             width: 3,
             height: barHeight
         };
         rectPrefix = echarts.graphic.clipRectByRect(rectPrefix, rectSystem);
-        var rectBox = {
+        let rectBox = {
             x: x,
             y: y,
             width: barWidth,
             height: barHeight
         };
         rectBox = echarts.graphic.clipRectByRect(rectBox, rectSystem);
-        var rectPercent;
+        let rectPercent;
         if(donePercentage >= 0 && donePercentage < 100) {
-            var completedWidth = (barWidth + 3) * donePercentage / 100;
+            const completedWidth = (barWidth + 3) * donePercentage / 100;
             rectPercent = {
                 x: x + completedWidth - 3,
                 y: y,
@@ -338,8 +522,8 @@ export class SOChart extends LitElement {
             };
             rectPercent = echarts.graphic.clipRectByRect(rectPercent, rectSystem);
         }
-        var hideText;
-        if(shiftY == 0) { // Not a Gantt chart
+        let hideText;
+        if(shiftY === 0) { // Not a Gantt chart
             hideText = !rectPrefix;
         } else {
             hideText = !rectBox;
@@ -392,31 +576,32 @@ export class SOChart extends LitElement {
 
     // Render labels on vertical axis - labels can be connected within the same group too (used by Gantt chart)
     // Data Point: [Y-value, group label, connected, label, sub-label, bar color, font-size, extra-font-size]
+    // noinspection JSUnusedGlobalSymbols
     _renderVAxisLabel(params, api) {
         const minY = params.coordSys.y;
-        const maxY = minY + params.coordSys.height;
+        // const maxY = minY + params.coordSys.height;
         const width = params.coordSys.x - 15;
-        var index = api.value(0);
-        var groupName = api.value(1);
-        var connected = api.value(2);
-        var label = api.value(3);
-        var sublabel = api.value(4);
-        var color = api.value(5);
-        var fontSize = api.value(6);
-        var extraFontSize = api.value(7);
-        var barHeight = api.size([0, 1])[1];
-        var y = api.coord([0, index])[1] - barHeight;
+        const index = api.value(0);
+        const groupName = api.value(1);
+        const connected = api.value(2);
+        const label = api.value(3);
+        const sublabel = api.value(4);
+        const color = api.value(5);
+        const fontSize = api.value(6);
+        const extraFontSize = api.value(7);
+        const barHeight = api.size([0, 1])[1];
+        const y = api.coord([0, index])[1] - barHeight;
         let ry = y + 0.2 * barHeight, ty1 = y + 0.6 * barHeight, ty2 = y + 0.8 * barHeight, rh = 0.8 * barHeight;
         if(ry < minY) {
             let d = minY - ry;
             ry = minY;
             rh -= d;
         }
-        var rect = {
-           x: 10,
-           y: ry,
-           width: width - 10,
-           height: rh
+        let rect = {
+            x: 10,
+            y: ry,
+            width: width - 10,
+            height: rh
         };
         let elements = {
             type: 'group',
@@ -502,7 +687,7 @@ export class SOChart extends LitElement {
                 }
             }]
         };
-        if(connected == 1) {
+        if(connected === 1) {
             rect = {
                x: 10,
                y: y,
@@ -541,31 +726,32 @@ export class SOChart extends LitElement {
 
     // Render arrow lines to show dependencies between bars rendered by the "HBar" renderer. (Used by Gantt chart)
     // Data Point: [Y-value, start, end, "{d:[[dependent Y-value, dependent start, dependent end]...]}"]
+    // noinspection JSUnusedGlobalSymbols
     _renderDependency(params, api) {
         const minX = params.coordSys.x;
         const minY = params.coordSys.y;
         const maxX = minX + params.coordSys.width;
         const maxY = minY + params.coordSys.height;
         const ignore = (x, y) => x < minX || x > maxX || y < minY || y > maxY;
-        var HEIGHT_RATIO = 0.6;
-        var index = api.value(0);
-        var start = api.coord([api.value(1), index]);
-        var end = api.coord([api.value(2), index]);
-        var barWidth = end[0] - start[0];
-        var barHeight = api.size([0, 1])[1] * HEIGHT_RATIO;
-        var x = start[0];
-        var y = (start[1] - barHeight) - (barHeight / 3);
-        var dependencies = JSON.parse(api.value(3).replaceAll('^', '"')).d;
+        const HEIGHT_RATIO = 0.6;
+        const index = api.value(0);
+        const start = api.coord([api.value(1), index]);
+        // const end = api.coord([api.value(2), index]);
+        //var barWidth = end[0] - start[0];
+        const barHeight = api.size([0, 1])[1] * HEIGHT_RATIO;
+        const x = start[0];
+        const y = (start[1] - barHeight) - (barHeight / 3);
+        const dependencies = JSON.parse(api.value(3).replaceAll('^', '"')).d;
         let links = []
         for(let j = 0; j < dependencies.length; j++){
-            var parent = dependencies[j];
-            var indexParent = parent[0];
-            var startParent = api.coord([parent[1], indexParent]);
-            var endParent = api.coord([parent[2], indexParent]);
-            var barWidthParent = endParent[0] - startParent[0];
-            var barHeightParent = api.size([0, 1])[1] * HEIGHT_RATIO;
-            var xParent = startParent[0];
-            var yParent = (startParent[1] - barHeightParent) - (barHeightParent / 3);
+            const parent = dependencies[j];
+            const indexParent = parent[0];
+            const startParent = api.coord([parent[1], indexParent]);
+            const endParent = api.coord([parent[2], indexParent]);
+            const barWidthParent = endParent[0] - startParent[0];
+            const barHeightParent = api.size([0, 1])[1] * HEIGHT_RATIO;
+            const xParent = startParent[0];
+            const yParent = (startParent[1] - barHeightParent) - (barHeightParent / 3);
             let arrow = {}
             if(x < (xParent + barWidthParent / 2)) {
                 if(y > yParent) {
@@ -608,7 +794,7 @@ export class SOChart extends LitElement {
                         fill: "#000",
                     })
                 }
-            };
+            }
             let circleBottom = {
                 type: 'ring',
                 ignore: ignore(xParent + barWidthParent / 2, yParent + barHeightParent),
@@ -675,22 +861,23 @@ export class SOChart extends LitElement {
     }
 
     // Render horizontal bands. Data Point: [Y-value, start, end, color]
+    // noinspection JSUnusedGlobalSymbols
     _renderHBand(params, api) {
-        var index = api.value(0);
-        var color = api.value(3);
-        var start = api.coord([api.value(1), index]);
-        var end = api.coord([api.value(2), index]);
-        var barWidth = end[0] - start[0];
-        var barHeight = api.size([0, 1])[1];
-        var x = start[0];
-        var y = start[1] - barHeight;
-        var rectNormal = {
+        const index = api.value(0);
+        const color = api.value(3);
+        const start = api.coord([api.value(1), index]);
+        const end = api.coord([api.value(2), index]);
+        const barWidth = end[0] - start[0];
+        const barHeight = api.size([0, 1])[1];
+        const x = start[0];
+        const y = start[1] - barHeight;
+        let rectNormal = {
             x: x,
             y: y,
             width: barWidth,
             height: barHeight
         };
-        var rectSystem = {
+        const rectSystem = {
             x: params.coordSys.x,
             y: params.coordSys.y,
             width: params.coordSys.width,
@@ -712,15 +899,16 @@ export class SOChart extends LitElement {
     }
 
     // Render a vertical line at a given value. Single Data Point: [line at, text label, color]
+    // noinspection JSUnusedGlobalSymbols
     _renderVLine(params, api) {
-        var lineAt = api.coord([api.value(0), 0]);
-        var x = lineAt[0];
-        var y = params.coordSys.y;
-        var y_end = y + params.coordSys.height;
+        const lineAt = api.coord([api.value(0), 0]);
+        const x = lineAt[0];
+        const y = params.coordSys.y;
+        const y_end = y + params.coordSys.height;
         let color = api.value(2);
         let text = api.value(1);
-        var textWidth = echarts.format.getTextRect(text).width;
-        var elements = [];
+        const textWidth = echarts.format.getTextRect(text).width;
+        const elements = [];
         if(textWidth > 0) {
             elements.push({
                 type: 'text',

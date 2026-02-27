@@ -17,7 +17,6 @@
 package com.storedobject.chart;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -25,15 +24,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import com.storedobject.helper.ID;
-import com.storedobject.helper.LitComponent;
+import com.storedobject.helper.LitComponentWithSize;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.ClientCallable;
-import com.vaadin.flow.component.HasSize;
 import com.vaadin.flow.component.Tag;
 import com.vaadin.flow.component.dependency.JsModule;
 import com.vaadin.flow.component.dependency.NpmPackage;
+import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.shared.Registration;
 
 /**
  * <p>
@@ -48,7 +51,7 @@ import com.vaadin.flow.component.dependency.NpmPackage;
  * </p>
  * <p>
  * Typical usage of the SOChart is to new it and add it to some layout for displaying it. Any {@link Component} that is
- * added to the {@link Chart} will be be displayed. For example, you can create a {@link PieChart} and add it to the
+ * added to the {@link Chart} will be displayed. For example, you can create a {@link PieChart} and add it to the
  * {@link SOChart} using {@link #add(Component...)}.
  * </p>
  *
@@ -63,10 +66,10 @@ import com.vaadin.flow.component.dependency.NpmPackage;
  *
  * @author Syam
  */
-@NpmPackage(value = "echarts", version = "5.5.0")
+@NpmPackage(value = "echarts", version = "5.6.0")
 @Tag("so-chart")
 @JsModule("./chart/chart.js")
-public class SOChart extends LitComponent implements HasSize {
+public class SOChart extends LitComponentWithSize {
 
 	final static ComponentEncoder[] encoders = { new ComponentEncoder("*", DefaultColors.class),
 			new ComponentEncoder("*", DefaultTextStyle.class), new ComponentEncoder(Title.class),
@@ -91,27 +94,22 @@ public class SOChart extends LitComponent implements HasSize {
 	private DefaultColors defaultColors;
 	private AbstractColor defaultBackground;
 	private DefaultTextStyle defaultTextStyle;
-	private final HashMap<SOEvent, Runnable> events = new HashMap<>();
 	private String theme;
 	private Language language;
 	private boolean svg = false;
-
-	@ClientCallable
-	private void runEvent(final String event, final String target) {
-		events.get(new SOEvent(event, target)).run();
-	}
+	private final Map<Integer, Integer> dataLengthMap = new HashMap<>();
+	private final Map<Integer, Integer> datasetIndexMap = new HashMap<>();
+	private boolean debugData = false;
+	private boolean debugOptions = false;
+	private boolean debugEvents = false;
+	private final AtomicInteger eventId = new AtomicInteger(0);
+	private final EventHandles eventHandles = new EventHandles();
 
 	/**
 	 * Constructor.
 	 */
 	public SOChart() {
 		getElement().setProperty("idChart", "sochart" + ID.newID());
-		// SOEvent event1 = new SOEvent("click", "1");
-		// SOEvent event2 = new SOEvent("click", "2");
-		// this.events.put(event1, () -> System.out.println("Something is right here node 1"));
-		// this.events.put(event2, () -> System.out.println("Something is right here node 2"));
-		// executeJS("addEvent", event1.getEvent(), event1.getTarget());
-		// executeJS("addEvent", event2.getEvent(), event2.getTarget());
 	}
 
 	@Override
@@ -126,10 +124,290 @@ public class SOChart extends LitComponent implements HasSize {
 		}
 	}
 
+	private static Class<? extends ComponentPart> partType(final String type) {
+		for (final ComponentEncoder ce : encoders) {
+			if (ce.label.equals(type)) {
+				return ce.partType;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Enables or disables debugging functionality at the client-side. Debug messages will be printed to the JavaScript
+	 * console if enabled.
+	 *
+	 * @param debugData
+	 *            if true, enables debugging for data sets used.
+	 * @param debugOptions
+	 *            if true, enables debugging for options and configurations of the chart.
+	 * @param debugEvents
+	 *            if true, enables debugging for events and their handling.
+	 */
+	public void debug(final boolean debugData, final boolean debugOptions, final boolean debugEvents) {
+		this.debugData = debugData;
+		this.debugOptions = debugOptions;
+		this.debugEvents = debugEvents;
+		if (!neverUpdated) {
+			executeJS("debug", debugData, debugOptions, debugEvents);
+		}
+	}
+
+	/**
+	 * This method is invoked when SOChart wants to show some errors. The default implementation shows a notification
+	 * for 1 minute. However, you can override this method to customize the error handling.
+	 *
+	 * @param message
+	 *            The error message to be shown.
+	 */
+	@ClientCallable
+	public void onError(final String message) {
+		Notification.show(message, 60000, Notification.Position.MIDDLE, true);
+	}
+
+	@ClientCallable
+	private void onMouseEvent(final int id, final String componentType, final int componentIndex,
+			final String componentSubtype, final String seriesId, final String seriesName, final String targetType,
+			final String value, final String dataType, final String seriesType, final String color) {
+		final EventHandler eventHandler = eventHandles.get(id);
+		if (eventHandler == null) {
+			return;
+		}
+		final Event event = new Event(this, eventHandler.type, eventHandler.userData);
+		if (componentType != null && !componentType.isEmpty()) {
+			event.addData("typeName", componentType.equals("series") ? "chart" : componentType);
+			event.addData("type", partType(componentType));
+		}
+		event.addData("serial", componentIndex);
+		String part = componentSubtype;
+		if (part == null || part.isEmpty()) {
+			part = targetType;
+		}
+		event.addData("part", part);
+		event.addData("value", value);
+		if (seriesId != null && !seriesId.isEmpty()) {
+			event.addData("chartId", seriesId);
+		}
+		if (seriesName != null && !seriesName.isEmpty()) {
+			event.addData("chartName", seriesName);
+		}
+		if (dataType != null && !dataType.isEmpty()) {
+			event.addData("dataType", dataType);
+		}
+		if (seriesType != null && !seriesType.isEmpty()) {
+			event.addData("chartType", seriesType);
+		}
+		if (color != null && !color.isEmpty()) {
+			event.addData("color", color);
+		}
+		eventHandler.listener.onEvent(event);
+	}
+
+	@ClientCallable
+	private void onLegendEvent(final int id, final String legendName, final String legendSelection) {
+		final EventHandler eventHandler = eventHandles.get(id);
+		if (eventHandler == null) {
+			return;
+		}
+		final Event event = new Event(this, eventHandler.type, eventHandler.userData);
+		event.addData("legendName", legendName);
+		event.addData("legendSelection", legendSelection);
+		eventHandler.listener.onEvent(event);
+	}
+
+	/**
+	 * Dispatch an action to the chart.
+	 *
+	 * @param parameters
+	 *            Parameters to be passed to the action. It must be a valid JSON string supported by echarts's
+	 *            dispatchAction method.
+	 */
+	public void dispatchAction(final String parameters) {
+		executeJS("dispatchAction", parameters);
+	}
+
+	/**
+	 * Sets the visibility of a chart by sending the appropriate action. This has the same effect of clicking on the
+	 * legend to hide/show the chart. However, this method is useful when you want to set the visibility of a chart
+	 * programmatically.
+	 *
+	 * @param visible
+	 *            a boolean indicating whether the chart should be visible (true) or hidden (false)
+	 * @param chart
+	 *            the chart whose visibility is to be set
+	 */
+	public void setVisible(final boolean visible, final Chart chart) {
+		dispatchAction("{\"type\":\"legend" + (visible ? "" : "Un") + "Select\",\"name\":\"" + chart.getName() + "\"}");
+	}
+
+	/**
+	 * Toggles the visibility of a chart by sending the appropriate action..
+	 *
+	 * @param chart
+	 *            the chart whose visibility is to be toggles
+	 */
+	public void toggleVisible(final Chart chart) {
+		dispatchAction("{\"type\":\"legendToggleSelect\",\"name\":\"" + chart.getName() + "\"}");
+	}
+
+	/**
+	 * Adds a listener for a specific event type to the given chart. This method allows monitoring of events by
+	 * attaching a listener to the specified chart.
+	 *
+	 * @param eventType
+	 *            the type of event to listen for
+	 * @param listener
+	 *            the listener to handle the event
+	 * @param chart
+	 *            the chart instance to which the event listener is being added
+	 * @return a Registration object that can be used to unregister the listener
+	 */
+	public Registration addListener(final EventType eventType, final EventListener listener, final Chart chart) {
+		return addListener(eventType, listener, chart, -1, null);
+	}
+
+	/**
+	 * Adds an event listener to the specified chart for the given event type.
+	 *
+	 * @param eventType
+	 *            the type of event to listen for
+	 * @param listener
+	 *            the event listener to be added
+	 * @param chart
+	 *            the chart to which the listener is attached
+	 * @param dataType
+	 *            additional data type information needed for the listener
+	 * @return a Registration object that can be used to manage the listener
+	 */
+	public Registration addListener(final EventType eventType, final EventListener listener, final Chart chart,
+			final String dataType) {
+		return addListener(eventType, listener, chart, -1, dataType);
+	}
+
+	/**
+	 * Adds a listener for the specified event type to the given chart. The listener can be tied to a specific data
+	 * index for finer control.
+	 *
+	 * @param eventType
+	 *            the type of event to listen for
+	 * @param listener
+	 *            the event listener to be invoked when the event occurs
+	 * @param chart
+	 *            the chart to which the listener is being attached
+	 * @param dataIndex
+	 *            the index of the data the listener should target, or -1 for no specific index
+	 * @return a Registration object that can be used to unregister the listener
+	 */
+	public Registration addListener(final EventType eventType, final EventListener listener, final Chart chart,
+			final int dataIndex) {
+		return addListener(eventType, listener, chart, dataIndex, null);
+	}
+
+	/**
+	 * Adds an event listener to a specified event type on the given chart, with additional options for specifying data
+	 * index and data type.
+	 *
+	 * @param eventType
+	 *            the type of event to listen for
+	 * @param listener
+	 *            the event listener to be added
+	 * @param chart
+	 *            the chart instance for which the listener is being added
+	 * @param dataIndex
+	 *            the index of the data point in the series; use -1 if not applicable
+	 * @param dataType
+	 *            an optional string specifying the type of data; can be null or empty (when the chart has more than one
+	 *            type of associated data, this could be specified to identify the data such as "edge", "node" etc, in
+	 *            {@link GraphChart}.
+	 * @return a Registration object representing the registration of the listener, which can be used to remove the
+	 *         listener later
+	 */
+	public Registration addListener(final EventType eventType, final EventListener listener, final Chart chart,
+			final int dataIndex, final String dataType) {
+		final StringBuilder p = new StringBuilder();
+		if (chart != null) {
+			p.append("{\"seriesId\":\"").append(chart.getId()).append('"');
+			if (dataIndex >= 0) {
+				p.append(",\"dataIndex\":").append(dataIndex);
+			}
+			if (dataType != null && !dataType.isEmpty()) {
+				p.append(",\"dataType\":\"").append(dataType).append("\"");
+			}
+			p.append("}");
+		}
+		return addListener(eventType, listener, p.isEmpty() ? null : p.toString(), chart);
+	}
+
+	/**
+	 * Adds a listener to the specified event type. The listener will be triggered whenever the specified event occurs.
+	 *
+	 * @param eventType
+	 *            the type of the event for which the listener should be registered
+	 * @param listener
+	 *            the listener to be executed when the event occurs
+	 * @return a Registration instance that can be used to unregister the listener
+	 */
+	public Registration addListener(final EventType eventType, final EventListener listener) {
+		return addListener(eventType, listener, (String) null, null);
+	}
+
+	/**
+	 * Adds a listener for a specified event type. The listener will be notified when events of the given type occur.
+	 *
+	 * @param eventType
+	 *            the type of event to listen for
+	 * @param listener
+	 *            the listener to handle the event
+	 * @param userData
+	 *            optional user data to associate with the event listener, it can be accessed later by the listener via
+	 *            {@link Event#getUserData()}
+	 * @return a Registration object that can be used to deregister the listener
+	 */
+	public Registration addListener(final EventType eventType, final EventListener listener, final Object userData) {
+		return addListener(eventType, listener, null, userData);
+	}
+
+	/**
+	 * Registers an event listener for a specified event type with optional parameters.
+	 *
+	 * @param eventType
+	 *            the type of the event the listener is to be registered for
+	 * @param listener
+	 *            the listener that will handle the event
+	 * @param parameters
+	 *            optional parameters associated with the event listener, if present, it should be a valid JSON string
+	 *            supported by echarts.
+	 * @return a {@code Registration} object that can be used to remove the event listener
+	 */
+	public Registration addListener(final EventType eventType, final EventListener listener, final String parameters) {
+		return addListener(eventType, listener, parameters, null);
+	}
+
+	/**
+	 * Adds a listener for a specific event type, allowing custom parameters and optional user data to be passed.
+	 *
+	 * @param eventType
+	 *            the type of event to listen for
+	 * @param listener
+	 *            the listener that will handle the event
+	 * @param parameters
+	 *            optional parameters associated with the event listener, if present, it should be a valid JSON string
+	 *            supported by echarts.
+	 * @param userData
+	 *            optional user data to associate with the event listener, it can be accessed later by the listener via
+	 *            {@link Event#getUserData()}
+	 * @return a Registration object that can be used to remove the listener
+	 */
+	public Registration addListener(final EventType eventType, final EventListener listener, final String parameters,
+			final Object userData) {
+		final EventHandler eh = new EventHandler(listener, eventType, parameters, userData);
+		return () -> eventHandles.removeHandler(eh);
+	}
+
 	/**
 	 * Get the list of default colors. A list is returned, and you may add any number of colors to that list. Those
 	 * colors will be used sequentially and circularly. However, please note that if the list contains less than 11
-	 * colors, more colors will be added to it automatically from the following to make the count 11:<BR>
+	 * colors, more colors will be added to it automatically from the following to make count 11:<BR>
 	 * ['#0000ff', '#c23531', '#2f4554', '#61a0a8', '#d48265', '#91c7ae', '#749f83', '#ca8622', '#bda29a', '#6e7074',
 	 * '#546570', '#c4ccd3']
 	 *
@@ -174,6 +452,16 @@ public class SOChart extends LitComponent implements HasSize {
 	}
 
 	/**
+	 * Enables the default tooltip for the associated component. This method initializes the tooltip instance if it is
+	 * currently null, ensuring that a tooltip is available for use.
+	 */
+	public void enableDefaultTooltip() {
+		if (tooltip == null) {
+			tooltip = new Tooltip();
+		}
+	}
+
+	/**
 	 * Get the default tooltip. You can customize it.
 	 *
 	 * @return THe default tooltip. Will return null if it was disabled via {@link #disableDefaultTooltip()}.
@@ -191,61 +479,22 @@ public class SOChart extends LitComponent implements HasSize {
 	}
 
 	/**
+	 * Enables the default legend for the chart. If the legend is not already initialized, this method creates a new
+	 * instance of the legend.
+	 */
+	public void enableDefaultLegend() {
+		if (legend == null) {
+			legend = new Legend();
+		}
+	}
+
+	/**
 	 * Get the default legend. You can customize it.
 	 *
 	 * @return THe default legend. Will return null if it was disabled via {@link #disableDefaultLegend()}.
 	 */
 	public Legend getDefaultLegend() {
 		return legend;
-	}
-
-	/**
-	 * Set the size.
-	 *
-	 * @param width
-	 *            Width.
-	 * @param height
-	 *            Height.
-	 */
-	public void setSize(final String width, final String height) {
-		setWidth(width);
-		setHeight(height);
-	}
-
-	@Override
-	public void setWidth(final String width) {
-		HasSize.super.setWidth(width);
-		getElement().setProperty("width", width);
-	}
-
-	@Override
-	public void setHeight(final String height) {
-		HasSize.super.setHeight(height);
-		getElement().setProperty("height", height);
-	}
-
-	@Override
-	public void setMinWidth(final String minWidth) {
-		HasSize.super.setMinWidth(minWidth);
-		getElement().setProperty("minw", minWidth);
-	}
-
-	@Override
-	public void setMinHeight(final String minHeight) {
-		HasSize.super.setMinHeight(minHeight);
-		getElement().setProperty("minh", minHeight);
-	}
-
-	@Override
-	public void setMaxWidth(final String maxWidth) {
-		HasSize.super.setMaxWidth(maxWidth);
-		getElement().setProperty("maxw", maxWidth);
-	}
-
-	@Override
-	public void setMaxHeight(final String maxHeight) {
-		HasSize.super.setMaxHeight(maxHeight);
-		getElement().setProperty("maxh", maxHeight);
 	}
 
 	/**
@@ -307,7 +556,7 @@ public class SOChart extends LitComponent implements HasSize {
 
 	/**
 	 * Add data to the chart. This method is normally not required to be used because the {@link Chart}s that are added
-	 * will automatically add its respective data too. This is used only when some extra data other that is used in the
+	 * will automatically add its respective data too. This is used only when some extra data that is used in the
 	 * {@link Chart}s directly for some other display purposes.
 	 *
 	 * @param data
@@ -383,13 +632,6 @@ public class SOChart extends LitComponent implements HasSize {
 			for (final Component c : components) {
 				if (c != null) {
 					this.components.add(c);
-					final Map<SOEvent, Runnable> cEvents = c.getEvents();
-					if (cEvents != null) {
-						events.putAll(cEvents);
-						for (final SOEvent key : events.keySet()) {
-							executeJS("addEvent", key.getEvent(), key.getTarget());
-						}
-					}
 				}
 			}
 		}
@@ -412,11 +654,16 @@ public class SOChart extends LitComponent implements HasSize {
 	}
 
 	/**
-	 * Remove all components from the chart. (Chart display will not be cleared unless {@link #update()} or
-	 * {@link #clear()} method is called).
+	 * Remove all components, associated data and event handlers from the chart. (Chart display will not be cleared
+	 * unless {@link #update()} or {@link #clear()} method is called).
 	 */
 	public void removeAll() {
+		eventHandles.clear();
+		componentGroups.clear();
 		components.clear();
+		dataSet.clear();
+		datasetIndexMap.clear();
+		dataLengthMap.clear();
 	}
 
 	/**
@@ -431,15 +678,15 @@ public class SOChart extends LitComponent implements HasSize {
 	}
 
 	/**
-	 * Update the chart display with current set of components. {@link Component#validate()} method of each component
-	 * will be invoked before updating the chart display. The chart display may be already there and only the changes
-	 * and additions will be updated. If a completely new display is required, {@link #clear()} should be invoked before
-	 * this. (Please note that an "update" will automatically happen when a {@link SOChart} is added to its parent
-	 * layout for the first time).
+	 * Update the chart display with the current set of components. {@link Component#validate()} method of each
+	 * component will be invoked before updating the chart display. The chart display may be already there, and only the
+	 * changes and additions will be updated. If a completely new display is required, {@link #clear()} should be
+	 * invoked before this. (Please note that an "update" will automatically happen when a {@link SOChart} is added to
+	 * its parent layout for the first time).
 	 * <p>
 	 * Note: If this is not the first update, data changes will not be transmitted to the client. So, if you really want
 	 * to update the whole data too, you should use the {@link #update(boolean)} method with the parameter set to
-	 * <code>false</code>. However, it better to transmit data separately via one of the data update methods
+	 * <code>false</code>. However, it is better to transmit data separately via one of the data update methods
 	 * ({@link #updateData(AbstractDataProvider...)} and {@link #updateData(HasData...)}) or use the {@link DataChannel}
 	 * for updating data once the first rendering was already done.
 	 * </p>
@@ -460,8 +707,8 @@ public class SOChart extends LitComponent implements HasSize {
 	 * changes if parameter is <code>true</code>.
 	 * </p>
 	 * <p>
-	 * Why this method is required? If the data set is really big, it will be accountable for the majority of the
-	 * communication overhead and it will be useful if we can update the display with other changes if no data is
+	 * Why is this method required? If the data set is huge, it will be accountable for the majority of the
+	 * communication overhead, and it will be useful if we can update the display with other changes if no data is
 	 * changed.
 	 * </p>
 	 * <p>
@@ -471,7 +718,7 @@ public class SOChart extends LitComponent implements HasSize {
 	 *
 	 * @param skipData
 	 *            Skip data or not. This parameter will be ignored if this is the first-time update. However, any data
-	 *            that was never sent to the client will be sent anyway.
+	 *            never sent to the client will be sent anyway.
 	 * @throws ChartException
 	 *             When any of the component is not valid.
 	 * @throws Exception
@@ -507,12 +754,6 @@ public class SOChart extends LitComponent implements HasSize {
 		parts.stream().filter(p -> p instanceof HasData).map(p -> (HasData) p).forEach(p -> p.declareData(collectData));
 		collectData.removeIf(Objects::isNull);
 		data.addAll(collectData);
-
-		// XCLOUD-955 yturchanin: sort data collection in order to avoid echarts bug (the size of the first dataset will
-		// be applied to following datasets so some data may be not visible on the chart)
-		Collections.sort(data, Comparator.comparing(AbstractDataProvider::dataSize));
-		Collections.reverse(data);
-
 		int dserial = data.stream().mapToInt(ComponentPart::getSerial).max().orElse(1);
 		dserial = Math.max(dserial, 1);
 		while (!data.isEmpty()) {
@@ -520,37 +761,13 @@ public class SOChart extends LitComponent implements HasSize {
 			if (!(d instanceof InternalDataProvider)) {
 				dataSet.add(d);
 			}
-			if (skipData) {
-				if (d.getSerial() <= 0) {
-					d.validate();
-					d.setSerial(dserial++);
-					initData(d);
-				}
-			} else {
-				if (d.getSerial() <= 0) {
-					d.validate();
-					d.setSerial(dserial++);
-				}
-				initData(d);
-			}
+			dserial = getDataSerial(skipData, dserial, d);
 			data.removeIf(ad -> ad.getSerial() == d.getSerial());
 			extraData.removeIf(ad -> ad.getSerial() == d.getSerial());
 		}
 		for (final AbstractDataProvider<?> extra : extraData) {
 			dataSet.add(extra);
-			if (skipData) {
-				if (extra.getSerial() <= 0) {
-					extra.validate();
-					extra.setSerial(dserial++);
-					initData(extra);
-				}
-			} else {
-				if (extra.getSerial() <= 0) {
-					extra.validate();
-					extra.setSerial(dserial++);
-				}
-				initData(extra);
-			}
+			dserial = getDataSerial(skipData, dserial, extra);
 		}
 		for (final ComponentPart c : parts) {
 			c.setSerial(-2);
@@ -562,10 +779,10 @@ public class SOChart extends LitComponent implements HasSize {
 		if (defaultTextStyle != null) {
 			parts.add(defaultTextStyle);
 		}
-		if (!skipData && legend != null && parts.stream().noneMatch(cp -> cp instanceof Legend)) {
+		if (legend != null && parts.stream().noneMatch(cp -> cp instanceof Legend)) {
 			parts.add(legend);
 		}
-		if (!skipData && tooltip != null && parts.stream().noneMatch(cp -> cp instanceof Tooltip)) {
+		if (tooltip != null && parts.stream().noneMatch(cp -> cp instanceof Tooltip)) {
 			parts.add(tooltip);
 		}
 		for (final ComponentEncoder ce : encoders) {
@@ -588,17 +805,30 @@ public class SOChart extends LitComponent implements HasSize {
 		}
 		parts.sort(Comparator.comparing(ComponentPart::getSerial));
 		final StringBuilder sb = new StringBuilder();
-		sb.append("{\"dataset\":{\"source\":{");
-		boolean first = true;
+		sb.append("{\"dataset\":[");
+		final List<List<Integer>> dataOrder = new ArrayList<>();
 		for (final AbstractDataProvider<?> d : dataSet) {
-			if (first) {
-				first = false;
+			final int length = dataLengthMap.get(d.getSerial());
+			List<Integer> order = dataOrder.stream().filter(o -> o.get(0) == length).findFirst().orElse(null);
+			if (order == null) {
+				order = new ArrayList<>();
+				order.add(length);
+				dataOrder.add(order);
+			}
+			order.add(d.getSerial());
+		}
+		boolean firstIndex = true;
+		for (final List<Integer> order : dataOrder) {
+			if (firstIndex) {
+				firstIndex = false;
 			} else {
 				sb.append(',');
 			}
-			sb.append("\"d").append(d.getSerial()).append("\":").append(d.getSerial());
+			sb.append("{\"source\":{");
+			sb.append(order.stream().skip(1).map(i -> "\"d" + i + "\":" + i).collect(Collectors.joining(",")));
+			sb.append("}}");
 		}
-		sb.append("}}");
+		sb.append("]");
 		if (defaultBackground != null) {
 			sb.append(",\"backgroundColor\":").append(defaultBackground);
 		}
@@ -609,7 +839,11 @@ public class SOChart extends LitComponent implements HasSize {
 		addCustomEncoding((ComponentPart) null, sb);
 		ComponentPart.removeComma(sb);
 		sb.append('}');
-		executeJS("updateChart", !skipData, customizeJSON(sb.toString()), theme, language(), svg ? "svg" : "canvas");
+		executeJS("updateChart", !skipData, customizeJSON(sb.toString()), theme, language(), svg ? "svg" : "canvas",
+				debugData, debugOptions, debugEvents);
+	}
+
+	private void chartUpdated() {
 		dataSet.clear();
 		parts.clear();
 		defaultColors = null;
@@ -618,14 +852,31 @@ public class SOChart extends LitComponent implements HasSize {
 		neverUpdated = false;
 	}
 
+	private int getDataSerial(final boolean skipData, int dserial, final AbstractDataProvider<?> d) throws Exception {
+		if (skipData) {
+			if (d.getSerial() <= 0) {
+				d.validate();
+				d.setSerial(dserial++);
+				initData(d);
+			}
+		} else {
+			if (d.getSerial() <= 0) {
+				d.validate();
+				d.setSerial(dserial++);
+			}
+			initData(d);
+		}
+		return dserial;
+	}
+
 	/**
 	 * This method is invoked after rendering each {@link ComponentPart} type so that you can add more such components.
 	 * <p>
 	 * Note: Please note that if you are adding any custom code, it should merge properly to the already generated part
-	 * in the buffer. You may use {@link #customizeJSON(String)} to check the final outcome.
+	 * in the buffer. You may use {@link #customizeJSON(String)} to check the outcome.
 	 * </p>
 	 * <p>
-	 * Warning: If you add custom code vis this mechanism, it may not be compatible with the future releases because the
+	 * Warning: If you add custom code via this mechanism, it may not be compatible with the future releases because the
 	 * functionality you add via this mechanism may be supported directly in the future releases.
 	 * </p>
 	 *
@@ -645,10 +896,10 @@ public class SOChart extends LitComponent implements HasSize {
 	 * {@link ComponentPart}). For this, this method is invoked with the component part parameter set to null.
 	 * <p>
 	 * Note: Please note that if you are adding any custom code, it should merge properly to the already generated part
-	 * in the buffer. You may use {@link #customizeJSON(String)} to check the final outcome.
+	 * in the buffer. You may use {@link #customizeJSON(String)} to check the outcome.
 	 * </p>
 	 * <p>
-	 * Warning: If you add custom code vis this mechanism, it may not be compatible with the future releases because the
+	 * Warning: If you add custom code via this mechanism, it may not be compatible with the future releases because the
 	 * functionality you add via this mechanism may be supported directly in the future releases.
 	 * </p>
 	 *
@@ -705,10 +956,62 @@ public class SOChart extends LitComponent implements HasSize {
 	}
 
 	private void updateData(final String command, final AbstractDataProvider<?> data) throws Exception {
-		final StringBuilder sb = new StringBuilder("{\"d\":");
-		data.encodeJSON(sb);
-		sb.append('}');
-		executeJS(command + "Data", data.getSerial(), customizeDataJSON(sb.toString(), data));
+		final StringBuilder b = new StringBuilder();
+		data.encodeJSON(b);
+		final String d = customizeDataJSON(b.toString(), data);
+		final int count = countData(d);
+		if (count < 0) {
+			throw new ChartException("Invalid data from " + data.className() + ": " + d);
+		}
+		final Integer oldCount = dataLengthMap.get(data.getSerial());
+		dataLengthMap.put(data.getSerial(), count);
+		if (oldCount != null && count != oldCount) {
+			final Integer oldIndex = datasetIndexMap.get(oldCount);
+			datasetIndexMap.put(count, oldIndex);
+		}
+		executeJS(command + "Data", data.getSerial(), "{\"d\":" + d + "}", datasetIndex(data));
+	}
+
+	private int datasetIndex(final AbstractDataProvider<?> data) {
+		final int count = dataLengthMap.getOrDefault(data.getSerial(), 0);
+		return datasetIndexMap.computeIfAbsent(count, k -> datasetIndexMap.size());
+	}
+
+	private static int countData(String d) {
+		int i = d.indexOf('[');
+		d = d.substring(i + 1);
+		i = d.lastIndexOf(']');
+		d = d.substring(0, i);
+		int depth = 0, count = 1;
+		boolean inQuote = false;
+		char quoteChar = 0;
+		char c;
+		for (i = 0; i < d.length(); i++) {
+			c = d.charAt(i);
+			if (!inQuote) {
+				if (c == '[' || c == '{' || c == '(') {
+					depth++;
+				} else if (c == ']' || c == '}' || c == ')') {
+					depth--;
+				} else if (c == '\'' || c == '"') {
+					inQuote = true;
+					quoteChar = c;
+				} else if (depth == 0 && c == ',') {
+					count++;
+				}
+			} else {
+				if (c == quoteChar && d.charAt(i - 1) != '\\') {
+					inQuote = false;
+				}
+			}
+			if (depth < 0) {
+				return -1;
+			}
+		}
+		if (depth != 0) {
+			return -1;
+		}
+		return count;
 	}
 
 	/**
@@ -755,6 +1058,14 @@ public class SOChart extends LitComponent implements HasSize {
 		}
 	}
 
+	/**
+	 * Adhoc update of data - typically called internally from {@link DataChannel} instances.
+	 *
+	 * @param data
+	 *            Data to push or append.
+	 * @param command
+	 *            Command - should be "push" or "append".
+	 */
 	void updateData(final String data, final String command) {
 		if (neverUpdated) {
 			return;
@@ -826,7 +1137,7 @@ public class SOChart extends LitComponent implements HasSize {
 						if ("*".equals(label)) { // Self-rendering type
 							++renderingIndex;
 							c.encodeJSON(sb);
-							return; // Only 1 such component is expected.
+							return; // Only 1 expected.
 						}
 						sb.append('"').append(label).append("\":");
 						sb.append('[');
@@ -839,6 +1150,13 @@ public class SOChart extends LitComponent implements HasSize {
 					ComponentPart.addComma(sb);
 					soChart.addCustomEncoding(c, sb);
 					ComponentPart.removeComma(sb);
+					if (c instanceof final Chart chart) {
+						final AbstractDataProvider<?> mainData = chart.mainData();
+						if (mainData != null) {
+							ComponentPart.addComma(sb);
+							sb.append("\"datasetIndex\":").append(soChart.datasetIndex(mainData));
+						}
+					}
 					sb.append('}');
 				}
 			}
@@ -908,7 +1226,7 @@ public class SOChart extends LitComponent implements HasSize {
 			AbstractColor c;
 			for (int i = 0; count < 11; i++) {
 				c = new Color(colors[i]);
-				if (this.contains(c)) {
+				if (contains(c)) {
 					continue;
 				}
 				if (first) {
@@ -964,6 +1282,71 @@ public class SOChart extends LitComponent implements HasSize {
 		@Override
 		public void setSerial(final int serial) {
 			this.serial = serial;
+		}
+	}
+
+	private final class EventHandler {
+
+		private final int id;
+		private final EventListener listener;
+		private final EventType type;
+		private final Object userData;
+		private final String parameters;
+
+		private EventHandler(final EventListener listener, EventType type, String parameters, final Object userData) {
+			if (type == null) {
+				type = EventType.BlankAreaClick;
+			}
+			final int i = eventId.incrementAndGet();
+			if (parameters == null || parameters.isEmpty() || type.getCategory() == EventCategory.BlankArea) {
+				parameters = "";
+			}
+			id = i;
+			this.listener = listener;
+			this.type = type;
+			this.parameters = parameters;
+			this.userData = userData;
+			eventHandles.put(id, this);
+		}
+
+		@Override
+		public boolean equals(final Object obj) {
+			return obj instanceof final EventHandler eh && eh.id == id;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(id);
+		}
+	}
+
+	@ClientCallable
+	private void sendEvents(int id) {
+		if (id == 0) {
+			id = Integer.MIN_VALUE;
+		}
+		eventHandles.send(id);
+	}
+
+	private class EventHandles extends ConcurrentHashMap<Integer, EventHandler> {
+
+		public void removeHandler(final EventHandler eventHandler) {
+			if (remove(eventHandler.id) != null) {
+				if (!neverUpdated) {
+					executeJS("undefineSOEvent", eventHandler.id);
+				}
+			}
+		}
+
+		void send(final int id) {
+			final int minId = eventHandles.keySet().stream().mapToInt(k -> k).filter(k -> k > id).min()
+					.orElse(Integer.MAX_VALUE);
+			if (minId == Integer.MAX_VALUE) {
+				chartUpdated();
+				return;
+			}
+			final EventHandler eh = eventHandles.get(minId);
+			executeJS("defineSOEvent", eh.id, eh.type.getName(), eh.type.getCategory().ordinal(), eh.parameters);
 		}
 	}
 }

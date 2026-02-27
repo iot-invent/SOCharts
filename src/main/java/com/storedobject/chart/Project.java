@@ -23,9 +23,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.function.BiFunction;
-import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -174,10 +172,10 @@ public class Project extends AbstractProject {
 			return true;
 		}
 		for (final ProjectTask a : predecessors) {
-			if (a instanceof TaskGroup && instance instanceof Task && ((TaskGroup) a).tasks.contains(instance)) {
+			if (a instanceof final TaskGroup tg && instance instanceof final Task t && tg.tasks.contains(t)) {
 				return true;
 			}
-			if (a instanceof Task && instance instanceof TaskGroup && ((TaskGroup) instance).equals(((Task) a).group)) {
+			if (a instanceof final Task t && instance instanceof final TaskGroup tg && tg.equals(t.group)) {
 				return true;
 			}
 			if (validateDependency(instance, a.predecessors)) {
@@ -185,17 +183,6 @@ public class Project extends AbstractProject {
 			}
 		}
 		return false;
-	}
-
-	private boolean contains(ProjectTask instance) {
-		if (instance instanceof Task) {
-			final Task task = (Task) instance;
-			if (task.group == null) {
-				return false;
-			}
-			instance = task.group;
-		}
-		return taskGroups.contains(instance);
 	}
 
 	/**
@@ -429,7 +416,7 @@ public class Project extends AbstractProject {
 	 *
 	 * @author Syam
 	 */
-	abstract class ProjectTask extends AbstractTask {
+	public abstract class ProjectTask extends AbstractTask {
 
 		private int order = -1;
 		/**
@@ -490,6 +477,7 @@ public class Project extends AbstractProject {
 		 *
 		 * @return Duration (in {@link #getDurationType()}).
 		 */
+		@Override
 		public abstract int getDuration();
 
 		/**
@@ -557,7 +545,7 @@ public class Project extends AbstractProject {
 					continue;
 				}
 				end = p.getEnd();
-				if (!(p instanceof Task) || !((Task) p).isMilestone()) {
+				if (!(p instanceof final Task task) || !task.isMilestone()) {
 					end = end.plus(1, getDurationType());
 				}
 				if (start.isBefore(end)) {
@@ -641,7 +629,7 @@ public class Project extends AbstractProject {
 					end = taskEnd;
 				}
 			}
-			if (start == null || end == null) {
+			if (start == null) {
 				return 0;
 			}
 			return (int) getDurationType().between(start, end);
@@ -776,6 +764,11 @@ public class Project extends AbstractProject {
 		}
 	}
 
+	@Override
+	boolean isEmptyGroup() {
+		return taskGroups.isEmpty();
+	}
+
 	/**
 	 * Get all task groups of this project.
 	 * <p>
@@ -832,49 +825,26 @@ public class Project extends AbstractProject {
 	}
 
 	@Override
-	<T> Iterator<T> iterator(final BiFunction<AbstractTask, Integer, T> encoder,
+	public <T> Iterator<T> iterator(final BiFunction<AbstractTask, Integer, T> function,
 			final Predicate<AbstractTask> taskFilter) {
-		return new TaskIterator<>(encoder, taskFilter);
+		return new TaskIterator<>(function, taskFilter);
 	}
 
-	private class TaskIterator<T> implements Iterator<T> {
-
-		private int index = -1;
-		private int groupIndex = -1;
-		private int taskIndex = -1;
-		private Task next = null;
-		private final BiFunction<AbstractTask, Integer, T> encoder;
-		private final Predicate<AbstractTask> taskFilter;
+	private class TaskIterator<T> extends ElementIterator<T> {
 
 		private TaskIterator(final BiFunction<AbstractTask, Integer, T> encoder,
 				final Predicate<AbstractTask> taskFilter) {
-			this.encoder = encoder;
-			this.taskFilter = taskFilter;
+			super(encoder, taskFilter);
 		}
 
 		@Override
-		public boolean hasNext() {
-			if (next != null) {
-				return true;
-			}
-			if (groupIndex == Integer.MIN_VALUE) {
-				return false;
-			}
-			if (groupIndex == -1) {
-				if (taskGroups.isEmpty()) {
-					groupIndex = Integer.MIN_VALUE;
-					return false;
-				}
-				groupIndex = 0;
-				taskIndex = 0;
-			} else {
-				++taskIndex;
-			}
+		void checkNext() {
 			TaskGroup taskGroup = taskGroups.get(groupIndex);
 			while (taskIndex >= taskGroup.tasks.size()) {
 				if (++groupIndex >= taskGroups.size()) {
 					groupIndex = Integer.MIN_VALUE;
-					return false;
+					next = null;
+					return;
 				}
 				taskGroup = taskGroups.get(groupIndex);
 				if (taskGroup.tasks.isEmpty()) {
@@ -885,21 +855,6 @@ public class Project extends AbstractProject {
 			}
 			++index;
 			next = taskGroup.getTask(taskIndex);
-			if (taskFilter != null && !taskFilter.test(next)) {
-				next = null;
-				return hasNext();
-			}
-			return true;
-		}
-
-		@Override
-		public T next() {
-			if (next == null) {
-				throw new NoSuchElementException();
-			}
-			final Task task = next;
-			next = null;
-			return encoder.apply(task, index);
 		}
 	}
 
@@ -907,15 +862,14 @@ public class Project extends AbstractProject {
 	protected AbstractDataProvider<String> dependencies() {
 		final BiFunction<AbstractTask, Integer, String> func = (t, i) -> "[" + i + "," + encode(t.renderStart()) + ","
 				+ encode(t.getEnd()) + "," + dependents((Task) t) + "]";
-		return dataProvider(DataType.OBJECT, func, t -> ((Task) t).predecessors.size() > 0);
+		return dataProvider(DataType.OBJECT, func, t -> !((Task) t).predecessors.isEmpty());
 	}
 
 	private String dependents(final Task task) {
 		final StringBuilder sb = new StringBuilder("{\"d\":[");
 		boolean first = true;
 		for (ProjectTask at : task.predecessors) {
-			if (at instanceof TaskGroup) {
-				final TaskGroup tg = (TaskGroup) at;
+			if (at instanceof final TaskGroup tg) {
 				at = tg.tasks.get(tg.tasks.size() - 1);
 			}
 			if (first) {
@@ -966,25 +920,21 @@ public class Project extends AbstractProject {
 			timeName = "day";
 		} else {
 			switch (durationType) {
-			case SECONDS: {
+			case SECONDS -> {
 				left = duration.toSeconds();
 				timeName = "second";
-				break;
 			}
-			case MINUTES: {
+			case MINUTES -> {
 				left = duration.toMinutes();
 				timeName = "minute";
-				break;
 			}
-			case HOURS: {
+			case HOURS -> {
 				left = duration.toHours();
 				timeName = "hour";
-				break;
 			}
-			default: {
+			default -> {
 				left = duration.toMillis();
 				timeName = "millisecond";
-				break;
 			}
 			}
 		}
@@ -994,7 +944,7 @@ public class Project extends AbstractProject {
 		if (left > 0) {
 			return "Late by " + left + " " + timeName;
 		}
-		return (-left) + " " + timeName + " remaining";
+		return -left + " " + timeName + " remaining";
 	}
 
 	@Override
@@ -1009,22 +959,5 @@ public class Project extends AbstractProject {
 	@Override
 	AbstractDataProvider<String> axisLabels() {
 		return dataProvider(DataType.OBJECT, this::getAxisLabel);
-	}
-
-	@Override
-	protected String getTooltipLabel(final AbstractTask abstractTask) {
-		final Task task = (Task) abstractTask;
-		String extra = task.getExtraInfo();
-		if (extra == null || extra.isEmpty()) {
-			extra = "";
-		} else {
-			extra = "<br>" + extra;
-		}
-		final Function<LocalDateTime, String> timeConverter = getTooltipTimeFormat();
-		final String s = getLabel(task) + "<br>" + timeConverter.apply(task.start);
-		if (task.isMilestone()) {
-			return s + extra;
-		}
-		return s + " - " + timeConverter.apply(task.getEnd()) + " (" + task.getDuration() + ")" + extra;
 	}
 }

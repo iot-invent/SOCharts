@@ -265,7 +265,7 @@ public class XRangeChart<X, Y> implements ComponentGroup {
 	}
 
 	/**
-	 * Whether to render progress bar or not.
+	 * Whether to render a progress bar or not.
 	 *
 	 * @param showProgress
 	 *            True/false.
@@ -275,7 +275,7 @@ public class XRangeChart<X, Y> implements ComponentGroup {
 	}
 
 	/**
-	 * Whether to render progress label or not.
+	 * Whether to render a progress label or not.
 	 *
 	 * @param showProgressLabel
 	 *            True/false.
@@ -349,12 +349,10 @@ public class XRangeChart<X, Y> implements ComponentGroup {
 	 * @return Formatted value.
 	 */
 	public String formatValue(final Object value) {
-		if (value instanceof LocalDate) {
-			final LocalDate d = (LocalDate) value;
+		if (value instanceof final LocalDate d) {
 			return DateTimeFormatter.ofPattern("MMM dd, yyyy").format(d);
 		}
-		if (value instanceof LocalDateTime) {
-			final LocalDateTime d = (LocalDateTime) value;
+		if (value instanceof final LocalDateTime d) {
 			return DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm:ss").format(d);
 		}
 		return value.toString();
@@ -370,7 +368,7 @@ public class XRangeChart<X, Y> implements ComponentGroup {
 	 */
 	public String formatYValue(final Y value) {
 		final String s = formatValue(value);
-		return s == null ? null : (s + ": ");
+		return s == null ? null : s + ": ";
 	}
 
 	/**
@@ -470,11 +468,7 @@ public class XRangeChart<X, Y> implements ComponentGroup {
 			if (!showProgressLabel) {
 				return "";
 			}
-			String p = String.valueOf(progress);
-			if (p.endsWith(".0")) {
-				p = p.substring(0, p.indexOf('.'));
-			}
-			return " (" + p + "%)";
+			return " (" + AbstractProject.trim(progress) + "%)";
 		}
 
 		private String tooltip() {

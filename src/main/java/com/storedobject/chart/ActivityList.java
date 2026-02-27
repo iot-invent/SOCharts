@@ -20,7 +20,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -94,17 +93,6 @@ public class ActivityList extends AbstractProject {
 	@Override
 	public boolean isEmpty() {
 		return activityGroups.isEmpty();
-	}
-
-	private boolean contains(ProjectActivity instance) {
-		if (instance instanceof Activity) {
-			final Activity activity = (Activity) instance;
-			if (activity.group == null) {
-				return false;
-			}
-			instance = activity.group;
-		}
-		return activityGroups.contains(instance);
 	}
 
 	/**
@@ -278,7 +266,7 @@ public class ActivityList extends AbstractProject {
 	 *
 	 * @author Syam
 	 */
-	abstract class ProjectActivity extends AbstractTask {
+	public abstract class ProjectActivity extends AbstractTask {
 
 		private final int duration;
 
@@ -325,6 +313,7 @@ public class ActivityList extends AbstractProject {
 		 *
 		 * @return Duration (in {@link #getDurationType()}).
 		 */
+		@Override
 		public int getDuration() {
 			return duration;
 		}
@@ -352,7 +341,14 @@ public class ActivityList extends AbstractProject {
 			return start;
 		}
 
-		abstract void check() throws ChartException;
+		/**
+		 * Performs a validation check for the activity or activity group. This method needs to be implemented by
+		 * subclasses to provide the specific validation logic.
+		 *
+		 * @throws ChartException
+		 *             if any validation error occurs during the check.
+		 */
+		protected abstract void check() throws ChartException;
 	}
 
 	/**
@@ -460,7 +456,7 @@ public class ActivityList extends AbstractProject {
 		}
 
 		@Override
-		void check() throws ChartException {
+		protected void check() throws ChartException {
 			final Activity p = activities.get(0);
 			Activity c;
 			p.check();
@@ -590,7 +586,7 @@ public class ActivityList extends AbstractProject {
 		}
 
 		@Override
-		void check() throws ChartException {
+		protected void check() throws ChartException {
 			if (getDuration() <= 0) {
 				throw new ChartException("Invalid duration in " + this);
 			}
@@ -602,6 +598,11 @@ public class ActivityList extends AbstractProject {
 			return "[" + getName() + " (" + timeConverter.apply(getStart()) + " - " + timeConverter.apply(getEnd())
 					+ ")]";
 		}
+	}
+
+	@Override
+	boolean isEmptyGroup() {
+		return activityGroups.isEmpty();
 	}
 
 	/**
@@ -641,74 +642,36 @@ public class ActivityList extends AbstractProject {
 	}
 
 	@Override
-	<T> Iterator<T> iterator(final BiFunction<AbstractTask, Integer, T> encoder,
+	public <T> Iterator<T> iterator(final BiFunction<AbstractTask, Integer, T> function,
 			final Predicate<AbstractTask> activityFilter) {
-		return new TaskIterator<>(encoder, activityFilter);
+		return new ActivityIterator<>(function, activityFilter);
 	}
 
-	private class TaskIterator<T> implements Iterator<T> {
+	private class ActivityIterator<T> extends ElementIterator<T> {
 
-		private int index = -1;
-		private int groupIndex = -1;
-		private int activityIndex = -1;
-		private Activity next = null;
-		private final BiFunction<AbstractTask, Integer, T> encoder;
-		private final Predicate<AbstractTask> activityFilter;
-
-		private TaskIterator(final BiFunction<AbstractTask, Integer, T> encoder,
+		private ActivityIterator(final BiFunction<AbstractTask, Integer, T> function,
 				final Predicate<AbstractTask> activityFilter) {
-			this.encoder = encoder;
-			this.activityFilter = activityFilter;
+			super(function, activityFilter);
 		}
 
 		@Override
-		public boolean hasNext() {
-			if (next != null) {
-				return true;
-			}
-			if (groupIndex == Integer.MIN_VALUE) {
-				return false;
-			}
-			if (groupIndex == -1) {
-				if (activityGroups.isEmpty()) {
-					groupIndex = Integer.MIN_VALUE;
-					return false;
-				}
-				groupIndex = 0;
-				activityIndex = 0;
-			} else {
-				++activityIndex;
-			}
+		void checkNext() {
 			ActivityGroup activityGroup = activityGroups.get(groupIndex);
-			while (activityIndex >= activityGroup.activities.size()) {
+			while (taskIndex >= activityGroup.activities.size()) {
 				if (++groupIndex >= activityGroups.size()) {
 					groupIndex = Integer.MIN_VALUE;
-					return false;
+					next = null;
+					return;
 				}
 				activityGroup = activityGroups.get(groupIndex);
 				if (activityGroup.activities.isEmpty()) {
 					continue;
 				}
-				activityIndex = 0;
+				taskIndex = 0;
 				break;
 			}
 			++index;
-			next = activityGroup.getActivity(activityIndex);
-			if (activityFilter != null && !activityFilter.test(next)) {
-				next = null;
-				return hasNext();
-			}
-			return true;
-		}
-
-		@Override
-		public T next() {
-			if (next == null) {
-				throw new NoSuchElementException();
-			}
-			final Activity activity = next;
-			next = null;
-			return encoder.apply(activity, index);
+			next = activityGroup.getActivity(taskIndex);
 		}
 	}
 
@@ -719,7 +682,7 @@ public class ActivityList extends AbstractProject {
 
 	@Override
 	protected final String getExtraAxisLabel(final AbstractTask activity) {
-		return activity instanceof ActivityGroup ? getExtraAxisLabel(((ActivityGroup) activity)) : "";
+		return activity instanceof final ActivityGroup g ? getExtraAxisLabel(g) : "";
 	}
 
 	protected String getExtraAxisLabel(@SuppressWarnings("unused") final ActivityGroup activityGroup) {
@@ -734,27 +697,8 @@ public class ActivityList extends AbstractProject {
 				+ extraFontSize(group) + "]";
 	}
 
-	private String nullAsEmpty(final String s) {
-		return s == null ? "" : s;
-	}
-
 	@Override
 	AbstractDataProvider<String> axisLabels() {
 		return dataProvider(DataType.OBJECT, this::getAxisLabel, t -> ((Activity) t).group.activities.get(0) == t);
-	}
-
-	@Override
-	protected String getTooltipLabel(final AbstractTask abstractActivity) {
-		final Activity activity = (Activity) abstractActivity;
-		String extra = nullAsEmpty(activity.getExtraInfo());
-		if (!extra.isEmpty()) {
-			extra = "<br>" + extra;
-		}
-		final Function<LocalDateTime, String> timeConverter = getTooltipTimeFormat();
-		final String s = getLabel(activity) + "<br>" + timeConverter.apply(activity.start);
-		if (activity.isMilestone()) {
-			return s + extra;
-		}
-		return s + " - " + timeConverter.apply(activity.getEnd()) + " (" + activity.getDuration() + ")" + extra;
 	}
 }
